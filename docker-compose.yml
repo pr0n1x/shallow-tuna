@@ -1,0 +1,78 @@
+networks:
+  exit1:
+    ipam:
+      config:
+        - subnet: 172.100.0.0/24
+  exit2:
+    ipam:
+      config:
+        - subnet: 172.101.0.0/24
+
+services:
+  awg-easy:
+    image: ghcr.io/w0rng/amnezia-wg-easy
+    container_name: awg-easy
+    restart: unless-stopped
+    init: true
+    entrypoint: ["sh", "/routing-init.sh"]
+    command: ["/usr/bin/dumb-init", "node", "server.js"]
+    environment:
+      - LANG=${LANG:-en}
+      - WG_HOST=${WG_HOST}
+      - PASSWORD_HASH=${AWG_PASSWORD_HASH}
+      - PORT=51821
+      - WG_DEFAULT_DNS=${AWG_DEFAULT_DNS:-1.1.1.1}
+      - WG_PORT=${AWG_PORT:-51820}
+      - WG_DEFAULT_ADDRESS=${AWG_DEFAULT_ADDRESS:-10.0.0.x}
+      - WG_ALLOWED_IPS=${AWG_ALLOWED_IPS:-0.0.0.0/0, ::/0}
+      - WG_PERSISTENT_KEEPALIVE=${AWG_PERSISTENT_KEEPALIVE:-25}
+      - EXIT_ROUTES=${EXIT_ROUTES:-}
+    volumes:
+      - ./data/awg:/etc/wireguard
+      - ./routing-init.sh:/routing-init.sh:ro
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - "${AWG_PORT:-51820}:51820/udp"
+      # Bind admin panel to localhost only — access via SSH tunnel
+      - "127.0.0.1:51821:51821/tcp"
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv4.ip_forward=1
+      - net.ipv6.conf.all.forwarding=1
+    networks:
+      - exit1
+      - exit2
+
+  wg-easy:
+    image: ghcr.io/wg-easy/wg-easy:15
+    container_name: wg-easy
+    restart: unless-stopped
+    entrypoint: ["sh", "/routing-init.sh"]
+    command: ["/usr/bin/dumb-init", "node", "server/index.mjs"]
+    environment:
+      - INSECURE=true
+      - EXIT_ROUTES=${EXIT_ROUTES:-}
+    volumes:
+      - ./data/wg:/etc/wireguard
+      - /lib/modules:/lib/modules:ro
+      - ./routing-init.sh:/routing-init.sh:ro
+    ports:
+      - "${WG_PORT:-51830}:${WG_PORT:-51830}/udp"
+      # Bind admin panel to localhost only — access via SSH tunnel
+      - "127.0.0.1:51831:51821/tcp"
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv4.ip_forward=1
+      - net.ipv6.conf.all.disable_ipv6=0
+      - net.ipv6.conf.all.forwarding=1
+      - net.ipv6.conf.default.forwarding=1
+    networks:
+      - exit1
+      - exit2
