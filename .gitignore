@@ -3,6 +3,8 @@
 
 .env
 .env.*
+!.env.dist
+!.env.example
 !.env.*.dist
 !.env.*.example
 *.env
