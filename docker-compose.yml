@@ -33,7 +33,7 @@ services:
     devices:
       - /dev/net/tun:/dev/net/tun
     ports:
-      - "${AWG_PORT:-51820}:51820/udp"
+      - "${AWG_PORT:-51820}:${AWG_PORT:-51820}/udp"
       # Bind admin panel to localhost only — access via SSH tunnel
       - "127.0.0.1:51821:51821/tcp"
     cap_add:
