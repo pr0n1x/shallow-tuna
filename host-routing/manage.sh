@@ -2,32 +2,21 @@
 set -euo pipefail
 
 # Host-side SNAT rules for multi-IP exit routing.
-# Reads EXIT_ROUTES from .env and maps Docker network subnets to external IPs.
+# Maps Docker network subnets to external IPs via EXIT_ROUTES env var.
 #
 # EXIT_ROUTES format: "gateway:external_ip,gateway:external_ip,..."
 # Example: EXIT_ROUTES=172.100.0.1:1.2.3.4,172.101.0.1:2.3.4.5
-#
-# Must be run on the Docker host (not inside a container).
-# Re-run after docker compose up (Docker's rules take priority otherwise).
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ENV_FILE="${SCRIPT_DIR}/.env"
 
 usage() {
     echo "Usage: $0 <attach|detach|status>"
     echo
-    echo "Reads EXIT_ROUTES from .env file"
+    echo "Reads EXIT_ROUTES from environment"
     echo "Format: gateway:external_ip,gateway:external_ip,..."
     exit 1
 }
 
-# Load EXIT_ROUTES from .env
-if [ -f "$ENV_FILE" ]; then
-    EXIT_ROUTES=$(grep -E '^EXIT_ROUTES=' "$ENV_FILE" | cut -d= -f2- | tr -d '"' || true)
-fi
-
 if [ -z "${EXIT_ROUTES:-}" ]; then
-    echo "ERROR: EXIT_ROUTES not set in $ENV_FILE" >&2
+    echo "ERROR: EXIT_ROUTES not set" >&2
     exit 1
 fi
 
@@ -57,7 +46,9 @@ get_subnet() {
 add_rule() {
     local subnet="$1" ip="$2"
     if iptables -t nat -C POSTROUTING -s "$subnet" -o "$IFACE" -j SNAT --to-source "$ip" 2>/dev/null; then
-        echo "  already exists: $subnet → $ip"
+        iptables -t nat -D POSTROUTING -s "$subnet" -o "$IFACE" -j SNAT --to-source "$ip"
+        iptables -t nat -I POSTROUTING -s "$subnet" -o "$IFACE" -j SNAT --to-source "$ip"
+        echo "  reattached: $subnet → $ip (via $IFACE)"
     else
         iptables -t nat -I POSTROUTING -s "$subnet" -o "$IFACE" -j SNAT --to-source "$ip"
         echo "  added: $subnet → $ip (via $IFACE)"

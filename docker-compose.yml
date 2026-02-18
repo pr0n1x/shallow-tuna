@@ -47,6 +47,24 @@ services:
       - exit1
       - exit2
 
+  host-routing:
+    build: ./host-routing
+    container_name: host-routing
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      awg-easy:
+        condition: service_healthy
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - EXIT_ROUTES=${EXIT_ROUTES:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./host-routing/manage.sh:/app/manage.sh:ro
+      - ./host-routing/daemon.sh:/app/daemon.sh:ro
+    entrypoint: ["sh", "/app/daemon.sh"]
+
   wg-easy:
     image: ghcr.io/wg-easy/wg-easy:15
     container_name: wg-easy
