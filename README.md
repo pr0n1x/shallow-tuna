@@ -4,10 +4,11 @@ Deploy WireGuard and AmneziaWG VPN servers with per-client exit IP routing.
 
 ## Features
 
-- **wg-easy** — Standard WireGuard with web UI
 - **amnezia-wg-easy** — AmneziaWG (obfuscated WireGuard) with web UI
+- **wg-easy** — Standard WireGuard with web UI
 - **Multi-IP exit routing** — Route different clients through different external IPs
 - **Persistent client assignments** — Survive container restarts
+- **Automatic host SNAT** — `host-routing` service manages iptables rules via Docker Compose
 
 ## Prerequisites
 
@@ -28,11 +29,14 @@ Edit `.env`:
 
 ```bash
 # Your server's external IP (for client configs)
-AWG_HOST=1.2.3.4
+WG_HOST=1.2.3.4
 
 # Generate password hash for AmneziaWG admin panel
 docker run --rm ghcr.io/w0rng/amnezia-wg-easy wgpw 'your-password'
 AWG_PASSWORD_HASH=<paste-hash-here>
+
+# Custom AmneziaWG port (optional, default 51820)
+# AWG_PORT=3127
 
 # Multi-IP routing: gateway:external_ip pairs
 # Tables auto-assigned: 100, 101, 102...
@@ -64,15 +68,9 @@ Apply: `sudo netplan apply`
 docker compose up -d
 ```
 
-### 4. Attach host SNAT rules
+The `host-routing` service automatically attaches SNAT rules and detaches them on `docker compose down`.
 
-```bash
-sudo ./host-routing.sh attach
-```
-
-> Run this after every `docker compose up` — Docker's NAT rules take priority otherwise.
-
-### 5. Access admin panels
+### 4. Access admin panels
 
 Admin panels are bound to localhost. Use SSH tunnels:
 
@@ -93,8 +91,8 @@ Then open:
 ### How it works
 
 1. Docker networks `exit1` and `exit2` have subnets `172.100.0.0/24` and `172.101.0.0/24`
-2. `routing-init.sh` creates routing tables inside containers (100, 101, ...)
-3. `host-routing.sh` adds SNAT rules on the host to map subnets to external IPs
+2. `wg-easy/routing-init.sh` creates routing tables inside containers (100, 101, ...)
+3. `host-routing` service adds SNAT rules on the host to map subnets to external IPs
 4. Per-client routing rules send traffic through specific tables
 
 ### Assign a client to exit IP
@@ -113,40 +111,46 @@ Then open:
 ### Check current SNAT rules
 
 ```bash
-sudo ./host-routing.sh status
+docker compose exec host-routing sh /app/manage.sh status
 ```
 
 ## File Structure
 
 ```
-.env                 # Configuration (not committed)
-.env.example         # Example configuration
-docker-compose.yml   # Container definitions
-routing-init.sh      # Container entrypoint for routing tables
-host-routing.sh      # Host SNAT rule management
-assign-exit.sh       # Per-client exit IP assignment
+.env                          # Configuration (not committed)
+.env.example                  # Example configuration
+docker-compose.yml            # Container definitions
+wg-easy/routing-init.sh       # Container entrypoint for routing tables
+host-routing/                 # Host SNAT rule management (Compose service)
+  Dockerfile
+  daemon.sh                   # Lifecycle: attach on start, detach on stop
+  manage.sh                   # attach/detach/status commands
+assign-exit.sh                # Per-client exit IP assignment
+setup-host/                   # Host setup scripts
+  docker-setup.sh
+  wireguard-setup.sh
+  amneziawg-setup.sh
 ```
 
 ## Ports
 
-| Service              | Port      | Protocol | Description          |
-|----------------------|-----------|----------|----------------------|
-| awg-easy (AmneziaWG) | 51820/udp | WG       | VPN tunnel           |
-| awg-easy (AmneziaWG) | 51821/tcp | HTTP     | Admin panel (local)  |
-| wg-easy  (WireGuard) | 51830/udp | WG       | VPN tunnel           |
-| wg-easy  (WireGuard) | 51831/tcp | HTTP     | Admin panel (local)  |
+| Service              | Port           | Protocol | Description          |
+|----------------------|----------------|----------|----------------------|
+| awg-easy (AmneziaWG) | AWG_PORT/udp  | WG       | VPN tunnel           |
+| awg-easy (AmneziaWG) | 51821/tcp     | HTTP     | Admin panel (local)  |
+| wg-easy  (WireGuard) | WG_PORT/udp   | WG       | VPN tunnel           |
+| wg-easy  (WireGuard) | 51831/tcp     | HTTP     | Admin panel (local)  |
 
 ## Troubleshooting
 
 ### VPN connected but no internet
 
-1. Check container logs: `docker logs wg-easy`
-2. Verify routing tables: `docker exec wg-easy ip route show table 100`
-3. Check SNAT rules: `sudo ./host-routing.sh status`
-4. Re-attach after compose restart: `sudo ./host-routing.sh attach`
+1. Check container logs: `docker compose logs awg-easy`
+2. Verify routing tables: `docker exec awg-easy ip route show table 100`
+3. Check SNAT rules: `docker compose exec host-routing sh /app/manage.sh status`
 
 ### Client not using expected exit IP
 
-1. Verify assignment: `./assign-exit.sh wg-easy list`
-2. Check rule inside container: `docker exec wg-easy ip rule show`
+1. Verify assignment: `./assign-exit.sh awg-easy list`
+2. Check rule inside container: `docker exec awg-easy ip rule show`
 3. Toggle VPN on client to force new connection

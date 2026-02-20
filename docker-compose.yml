@@ -29,7 +29,7 @@ services:
       - EXIT_ROUTES=${EXIT_ROUTES:-}
     volumes:
       - ./data/awg:/etc/wireguard
-      - ./routing-init.sh:/routing-init.sh:ro
+      - ./wg-easy/routing-init.sh:/routing-init.sh:ro
     devices:
       - /dev/net/tun:/dev/net/tun
     ports:
@@ -77,7 +77,7 @@ services:
     volumes:
       - ./data/wg:/etc/wireguard
       - /lib/modules:/lib/modules:ro
-      - ./routing-init.sh:/routing-init.sh:ro
+      - ./wg-easy/routing-init.sh:/routing-init.sh:ro
     ports:
       - "${WG_PORT:-51830}:${WG_PORT:-51830}/udp"
       # Bind admin panel to localhost only — access via SSH tunnel
