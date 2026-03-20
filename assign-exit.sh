@@ -44,6 +44,10 @@ unset IFS
 declare -A NETWORK_TO_GATEWAY
 for net in $(docker network ls --format '{{.Name}}' | grep "^${COMPOSE_PROJECT}_"); do
     gw=$(docker network inspect "$net" --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}' 2>/dev/null)
+    if [ -z "$gw" ]; then
+        subnet=$(docker network inspect "$net" --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null)
+        [ -n "$subnet" ] && gw="${subnet%.*}.1"
+    fi
     [ -n "$gw" ] && NETWORK_TO_GATEWAY["${net#${COMPOSE_PROJECT}_}"]="$gw"
 done
 
