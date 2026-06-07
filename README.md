@@ -130,6 +130,8 @@ setup-host/                   # Host setup scripts
   docker-setup.sh
   wireguard-setup.sh
   amneziawg-setup.sh
+  ndpi-setup.sh               # nDPI (xt_ndpi) DPI — block BitTorrent etc.
+  ndpi.md                     # nDPI DPI filtering docs
 ```
 
 ## Ports
