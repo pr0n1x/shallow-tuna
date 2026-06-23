@@ -2,6 +2,7 @@
 # Packaging for the nDPI xt_ndpi netfilter stack:
 #   xt-ndpi-dkms      - kernel module source, built per-kernel by DKMS
 #   xt-ndpi-iptables  - libxt_ndpi.so userspace "-m ndpi" iptables extension
+#   xt-ndpi-filter     - configurable systemd rule engine (/usr/sbin/ndpi-filter)
 
 export DH_VERBOSE = 1
 
@@ -9,8 +10,9 @@ DKMS_NAME = xt-ndpi
 DKMS_VER  = $(shell dpkg-parsechangelog -SVersion)
 
 CURDIR ?= $(shell pwd)
-SRCDST  = $(CURDIR)/debian/xt-ndpi-dkms/usr/src/$(DKMS_NAME)-$(DKMS_VER)
-IPTDST  = $(CURDIR)/debian/xt-ndpi-iptables
+SRCDST    = $(CURDIR)/debian/xt-ndpi-dkms/usr/src/$(DKMS_NAME)-$(DKMS_VER)
+IPTDST    = $(CURDIR)/debian/xt-ndpi-iptables
+RULESDST  = $(CURDIR)/debian/xt-ndpi-filter
 
 %:
 	dh $@ --with dkms
@@ -48,6 +50,14 @@ override_dh_auto_install:
 	  --exclude='windows' --exclude='*~' \
 	  src ndpi-netfilter $(SRCDST)/
 	$(MAKE) -C ndpi-netfilter/ipt install DESTDIR=$(IPTDST)
+	# xt-ndpi-filter: the generic rule engine + module autoload entry.
+	install -D -m0755 debian/ndpi-filter $(RULESDST)/usr/sbin/ndpi-filter
+	install -D -m0644 debian/xt_ndpi-modules-load.conf \
+	  $(RULESDST)/usr/lib/modules-load.d/xt_ndpi.conf
+
+# Install + enable ndpi-filter.service (from xt-ndpi-filter.ndpi-filter.service).
+override_dh_installsystemd:
+	dh_installsystemd --name=ndpi-filter --no-stop-on-upgrade
 
 # Stamp the DKMS source version to match this package version.
 override_dh_dkms:

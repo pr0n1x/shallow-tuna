@@ -42,3 +42,19 @@ Description: nDPI iptables extension (libxt_ndpi.so)
  xt-ndpi-dkms so the protocol IDs stay in lockstep with the kernel module.
  Depends on xt-ndpi-dkms because the match is inert without the xt_ndpi
  kernel module loaded.
+
+Package: xt-ndpi-filter
+Architecture: all
+Depends:
+ ${misc:Depends},
+ xt-ndpi-dkms (= ${source:Version}),
+ xt-ndpi-iptables (= ${source:Version}),
+ iptables,
+ kmod,
+Description: nDPI iptables rule engine (configurable)
+ Generic systemd-managed engine that applies nDPI-based iptables rules from
+ /etc/default/ndpi-filter to a configurable chain (e.g. Docker's DOCKER-USER),
+ on both iptables and ip6tables, re-applying them whenever Docker restarts.
+ The rules themselves are deployment config (bash arrays), so the same engine
+ can drop BitTorrent, or any other nDPI-classified protocol, without changing
+ the package. Pulls in the kernel module and the "-m ndpi" match.

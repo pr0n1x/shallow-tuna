@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Generic nDPI iptables rule engine. Applies/removes the rules defined in
+# /etc/default/ndpi-filter to a configurable chain, on both iptables and
+# ip6tables. With no config (or no rules) it is inert.
+#
+# Config (sourced as bash):
+#   NDPI_CHAIN="DOCKER-USER"
+#   NDPI_RULES=(
+#     "-m ndpi --proto bittorrent -j DROP"
+#   )
+
+CONFIG="${NDPI_FILTER_CONFIG:-/etc/default/ndpi-filter}"
+
+NDPI_CHAIN="DOCKER-USER"
+NDPI_RULES=()
+# shellcheck disable=SC1090
+[[ -r "$CONFIG" ]] && source "$CONFIG"
+
+apply_one() {
+    local ipt="$1" rule="$2"
+    local -a spec; read -r -a spec <<< "$rule"
+    # The chain may not exist yet (e.g. DOCKER-USER before dockerd starts).
+    "$ipt" -n -L "$NDPI_CHAIN" >/dev/null 2>&1 || return 0
+    "$ipt" -C "$NDPI_CHAIN" "${spec[@]}" 2>/dev/null \
+        || "$ipt" -I "$NDPI_CHAIN" 1 "${spec[@]}"
+}
+
+remove_one() {
+    local ipt="$1" rule="$2"
+    local -a spec; read -r -a spec <<< "$rule"
+    while "$ipt" -C "$NDPI_CHAIN" "${spec[@]}" 2>/dev/null; do
+        "$ipt" -D "$NDPI_CHAIN" "${spec[@]}"
+    done
+}
+
+do_start() {
+    modprobe xt_ndpi 2>/dev/null || true
+    local rule
+    for rule in ${NDPI_RULES[@]+"${NDPI_RULES[@]}"}; do
+        apply_one iptables  "$rule"
+        apply_one ip6tables "$rule"
+    done
+    echo "ndpi-filter: applied ${#NDPI_RULES[@]} rule(s) to $NDPI_CHAIN"
+}
+
+do_stop() {
+    local rule
+    for rule in ${NDPI_RULES[@]+"${NDPI_RULES[@]}"}; do
+        remove_one iptables  "$rule"
+        remove_one ip6tables "$rule"
+    done
+    echo "ndpi-filter: removed rules from $NDPI_CHAIN"
+}
+
+do_status() {
+    echo "== config: $CONFIG (chain=$NDPI_CHAIN, ${#NDPI_RULES[@]} rule(s)) =="
+    echo "== iptables $NDPI_CHAIN =="
+    iptables -n -L "$NDPI_CHAIN" --line-numbers 2>/dev/null | grep -i ndpi || echo "  (no ndpi rule)"
+    echo "== ip6tables $NDPI_CHAIN =="
+    ip6tables -n -L "$NDPI_CHAIN" --line-numbers 2>/dev/null | grep -i ndpi || echo "  (no ndpi rule)"
+}
+
+case "${1:-}" in
+    start)  do_start ;;
+    stop)   do_stop ;;
+    status) do_status ;;
+    *)      echo "Usage: $0 <start|stop|status>" >&2; exit 1 ;;
+esac

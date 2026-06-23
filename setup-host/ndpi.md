@@ -38,9 +38,11 @@ install them:
 sudo ./setup-host/ndpi-setup.sh install
 ```
 
-`install` apt-installs `xt-ndpi-dkms` + `xt-ndpi-iptables` (DKMS builds
-`xt_ndpi` against the running kernel), loads the module, persists it via
-`/etc/modules-load.d/xt_ndpi.conf`, and enables the rule.
+`install` apt-installs `xt-ndpi-dkms` + `xt-ndpi-iptables` + `xt-ndpi-filter`
+(DKMS builds `xt_ndpi` against the running kernel; the packages provide the
+`-m ndpi` match and the `ndpi-filter` rule engine + `xt_ndpi` autoload). It
+then writes the rule config to `/etc/default/ndpi-filter` and enables
+`ndpi-filter.service`.
 
 The nDPI revision is pinned in [`../ndpi/NDPI_REF`](../ndpi/NDPI_REF); override
 per-build with `NDPI_REF=<tag|commit> ./setup-host/ndpi-setup.sh build`.
@@ -69,12 +71,19 @@ still dies, it's just not a packet-1 block.
 ## Scope (optional)
 
 By default **all** forwarded BitTorrent is dropped (every flow on a VPN exit is
-client traffic). To limit it to specific exit networks, edit `MATCH` in
-`/usr/local/sbin/ndpi-filter` to add a source subnet, e.g.:
+client traffic). The rule engine (`xt-ndpi-filter`) is generic — edit the
+`NDPI_RULES` / `NDPI_CHAIN` config in `/etc/default/ndpi-filter` (and re-run
+`sudo systemctl restart ndpi-filter`) to scope it or block other protocols,
+e.g. limit to a subnet:
 
 ```bash
-MATCH=(-s 172.100.0.0/24 -m ndpi --proto bittorrent -j DROP)
+NDPI_CHAIN="DOCKER-USER"
+NDPI_RULES=(
+  "-s 172.100.0.0/24 -m ndpi --proto bittorrent -j DROP"
+)
 ```
+
+The canonical config is written by `ndpi-setup.sh`'s `write_config()`.
 
 ## Remove
 

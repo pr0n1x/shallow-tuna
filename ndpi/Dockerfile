@@ -63,7 +63,7 @@ RUN cd src && ./autogen.sh >/dev/null 2>&1; test -x configure
 # Overlay our packaging and build a binary-only, unsigned .deb (unprivileged).
 COPY --chown=${USER_NAME} debian/ /build/src/debian/
 RUN cd src && chmod +x debian/rules && dpkg-buildpackage -us -uc -b \
-    && cp /build/xt-ndpi-dkms_*.deb /build/xt-ndpi-iptables_*.deb /artifacts/
+    && cp /build/xt-ndpi-*_*.deb /artifacts/
 
 # Minimal final layer: just the .deb in /artifacts, owned by the host-mapped
 # user. /artifacts is baked into the image; the host folder is bind-mounted at

@@ -6,5 +6,8 @@ xt-ndpi (5.1.0+git20260623) noble; urgency=medium
     every kernel upgrade.
   * Add xt-ndpi-iptables: the userspace libxt_ndpi.so xtables extension that
     provides the iptables "-m ndpi" match, built from the same revision.
+  * Add xt-ndpi-filter: a configurable systemd rule engine (/usr/sbin/ndpi-filter)
+    that applies nDPI iptables rules from /etc/default/ndpi-filter to a chain
+    (default DOCKER-USER), re-applying on Docker restart.
 
  -- shalokh-vpn <maximmaclaude@gmail.com>  Tue, 23 Jun 2026 00:00:00 +0000
