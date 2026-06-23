@@ -4,8 +4,9 @@ Drops BitTorrent traffic transiting the VPN using **nDPI deep packet
 inspection**. Detection is flow-based, so it catches **encrypted (MSE/PE)**
 torrents and DHT/uTP — not just plaintext handshakes or well-known ports.
 
-> **Target:** Ubuntu 24.04 (kernel 6.8.x) only. `xt_ndpi` is an out-of-tree
-> kernel module built from source against the running kernel.
+> **Target:** Ubuntu 24.04. `xt_ndpi` is an out-of-tree kernel module shipped
+> as DKMS packages (see [`../ndpi`](../ndpi)); DKMS builds it against the
+> running kernel and rebuilds it **automatically** on kernel upgrades.
 
 ## How it works
 
@@ -16,8 +17,8 @@ VPN client ──▶ wg0 (inside container) ──▶ MASQUERADE (inside contain
                           DOCKER-USER chain: -m ndpi --proto bittorrent -j DROP
 ```
 
-- `xt_ndpi.ko` (kernel module) + `libxt_ndpi.so` (iptables extension) are built
-  and installed on the **host**. The module is global to the host kernel; the
+- `xt_ndpi.ko` (from `xt-ndpi-dkms`) + `libxt_ndpi.so` (from `xt-ndpi-iptables`)
+  are installed on the **host**. The module is global to the host kernel; the
   iptables extension cannot run inside the Alpine/musl VPN containers, so the
   rule is enforced on the host.
 - VPN client traffic is MASQUERADEd inside the container and then forwarded by
@@ -29,31 +30,26 @@ VPN client ──▶ wg0 (inside container) ──▶ MASQUERADE (inside contain
 
 ## Install
 
+First build the `.deb` packages with Docker Compose (no root needed), then
+install them:
+
 ```bash
+./setup-host/ndpi-setup.sh build      # -> ../ndpi/artifacts/*.deb
 sudo ./setup-host/ndpi-setup.sh install
 ```
 
-This builds nDPI, installs the module + iptables extension, loads `xt_ndpi`,
-persists it via `/etc/modules-load.d/xt_ndpi.conf`, and enables the rule.
+`install` apt-installs `xt-ndpi-dkms` + `xt-ndpi-iptables` (DKMS builds
+`xt_ndpi` against the running kernel), loads the module, persists it via
+`/etc/modules-load.d/xt_ndpi.conf`, and enables the rule.
 
-Pin a specific nDPI revision for reproducible builds:
+The nDPI revision is pinned in [`../ndpi/NDPI_REF`](../ndpi/NDPI_REF); override
+per-build with `NDPI_REF=<tag|commit> ./setup-host/ndpi-setup.sh build`.
 
-```bash
-sudo NDPI_REF=4.12 ./setup-host/ndpi-setup.sh install
-```
+## Maintenance — kernel upgrades
 
-## Maintenance — after a kernel upgrade
-
-The module is compiled against the running kernel. After a kernel upgrade
-(including 6.8 point releases) **rebuild and reload it**:
-
-```bash
-sudo ./setup-host/ndpi-setup.sh rebuild
-```
-
-Until rebuilt, `modprobe xt_ndpi` will fail on the new kernel and blocking will
-be **off**. If you want this automated, convert the build to DKMS — not done
-here to avoid shipping an untested DKMS config.
+Nothing to do. DKMS rebuilds `xt_ndpi` for the new kernel automatically on
+upgrade (via `/etc/kernel/postinst.d/dkms`), so blocking keeps working across
+reboots without intervention.
 
 ## Verify it's working
 
@@ -86,13 +82,14 @@ MATCH=(-s 172.100.0.0/24 -m ndpi --proto bittorrent -j DROP)
 sudo ./setup-host/ndpi-setup.sh uninstall
 ```
 
-Disables the service, removes the rule, unloads and uninstalls the module.
+Disables the service, removes the rule, unloads the module, and purges the
+`xt-ndpi-dkms` / `xt-ndpi-iptables` packages.
 
 ## Commands
 
 | Command     | Action                                                        |
 |-------------|---------------------------------------------------------------|
-| `install`   | Build + install xt_ndpi and enable blocking                   |
-| `rebuild`   | Rebuild module against current kernel, reload, re-apply rule   |
-| `status`    | Show module / iptables extension / rule state                 |
-| `uninstall` | Remove blocking and the module                                |
+| `build`     | Build the `.deb` packages with Docker Compose (no root)       |
+| `install`   | Install the packages and enable BitTorrent blocking           |
+| `status`    | Show package / module / iptables extension / rule state       |
+| `uninstall` | Remove blocking and purge the packages                        |

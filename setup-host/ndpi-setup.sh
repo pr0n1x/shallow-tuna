@@ -5,35 +5,36 @@ set -euo pipefail
 # inspection (xt_ndpi netfilter module). Detection is flow-based, so it
 # catches encrypted (MSE/PE) torrents, not just plaintext + DHT.
 #
-# TARGET: Ubuntu 24.04 (kernel 6.8.x) only. The xt_ndpi kernel module is
-# built from source against the running kernel; see ndpi.md for the
-# (documented) maintenance step required after a kernel upgrade.
+# TARGET: Ubuntu 24.04. The xt_ndpi module ships as DKMS packages (see ../ndpi):
+#   - `build`   builds the .deb packages with Docker Compose.
+#   - `install` installs them. DKMS compiles xt_ndpi against the running kernel
+#     and AUTO-REBUILDS it on every kernel upgrade (no manual rebuild step).
 #
 # Architecture:
-#   - xt_ndpi.ko + libxt_ndpi.so are built/installed on the HOST. The module
-#     is global to the host kernel; the iptables extension can't live inside
-#     the Alpine/musl VPN containers, so the DROP rule runs on the host.
-#   - VPN client traffic is MASQUERADEd inside the container, then forwarded
-#     by the host (docker bridge -> uplink), so it passes through the host
-#     FORWARD chain. Docker's DOCKER-USER chain is the supported hook for
-#     user rules there and is not flushed on container restart.
+#   - xt_ndpi.ko (xt-ndpi-dkms) + libxt_ndpi.so (xt-ndpi-iptables) live on the
+#     HOST. The module is global to the host kernel; the iptables extension
+#     can't run inside the Alpine/musl VPN containers, so the DROP rule runs on
+#     the host.
+#   - VPN client traffic is MASQUERADEd inside the container, then forwarded by
+#     the host (docker bridge -> uplink), so it passes through the host FORWARD
+#     chain. Docker's DOCKER-USER chain is the supported hook for user rules
+#     there and is not flushed on container restart.
 #   - A systemd unit re-applies the rule whenever docker (re)starts.
 
-if [[ $EUID -ne 0 ]]; then
-    echo "Error: run as root (sudo $0 install|uninstall)" >&2
-    exit 1
-fi
-
-# nDPI source. Default to the netfilter-maintained fork's master branch
-# (carries the kernel 6.8 fixes). Pin NDPI_REF=<tag|commit> for reproducible
-# builds once you've validated a specific revision on your kernel.
-NDPI_REPO="${NDPI_REPO:-https://github.com/vel21ripn/nDPI.git}"
-NDPI_REF="${NDPI_REF:-master}"
-SRC_DIR="/usr/src/ndpi-netfilter"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PKG_DIR="$SCRIPT_DIR/../ndpi"            # Docker Compose packaging dir
+ARTIFACTS="$PKG_DIR/artifacts"           # where built .debs land
 
 RULE_BIN="/usr/local/sbin/ndpi-filter"
 SERVICE="/etc/systemd/system/ndpi-filter.service"
 MODULES_CONF="/etc/modules-load.d/xt_ndpi.conf"
+
+require_root() {
+    if [[ $EUID -ne 0 ]]; then
+        echo "Error: '$1' must run as root (use sudo)" >&2
+        exit 1
+    fi
+}
 
 usage() {
     local base_name
@@ -42,60 +43,46 @@ usage() {
 Usage: $base_name <command>
 
 Commands:
-  install     Build & install xt_ndpi, then enable BitTorrent blocking
-  uninstall   Disable blocking and remove xt_ndpi
-  rebuild     Rebuild the module against the current kernel (run after a
-              kernel upgrade), then reload it
-  status      Show module + rule state
+  build       Build the .deb packages with Docker Compose (no root needed)
+  install     Install the packages and enable BitTorrent blocking
+  uninstall   Disable blocking and remove the packages
+  status      Show package / module / rule state
 
-Environment:
-  NDPI_REPO   nDPI git repo   (default: $NDPI_REPO)
-  NDPI_REF    git tag/commit  (default: $NDPI_REF)
-
-Examples:
+Typical flow:
+  $base_name build            # produces ../ndpi/artifacts/*.deb
   sudo $base_name install
-  sudo NDPI_REF=4.12 $base_name install
-  sudo $base_name rebuild
 EOF
     exit 0
 }
 
-build_module() {
-    echo "── Installing build prerequisites ──"
-    apt-get update
-    apt-get install -y \
-        build-essential git autoconf automake libtool pkg-config \
-        gettext flex bison \
-        libpcap-dev libjson-c-dev libnuma-dev libpcre2-dev \
-        libmaxminddb-dev librrd-dev libgcrypt20-dev \
-        iptables-dev "linux-headers-$(uname -r)"
-
+do_build() {
+    command -v docker >/dev/null 2>&1 \
+        || { echo "Error: docker is required to build the packages" >&2; exit 1; }
+    mkdir -p "$ARTIFACTS"
+    echo "── Building xt-ndpi .deb packages (Docker Compose) ──"
+    # Map the build to the invoking user so the .debs are owned by them.
+    ( cd "$PKG_DIR" && USER_ID="$(id -u)" GROUP_ID="$(id -g)" \
+        docker compose run --rm --build build )
     echo ""
-    echo "── Fetching nDPI ($NDPI_REF) ──"
-    if [[ -d "$SRC_DIR/.git" ]]; then
-        git -C "$SRC_DIR" fetch --all --tags --prune
-    else
-        rm -rf "$SRC_DIR"
-        git clone "$NDPI_REPO" "$SRC_DIR"
+    echo "Built:"
+    ls -1 "$ARTIFACTS"/*.deb
+}
+
+install_packages() {
+    shopt -s nullglob
+    local dkms=( "$ARTIFACTS"/xt-ndpi-dkms_*.deb )
+    local ipt=( "$ARTIFACTS"/xt-ndpi-iptables_*.deb )
+    if [[ ${#dkms[@]} -eq 0 || ${#ipt[@]} -eq 0 ]]; then
+        echo "Error: packages not found in $ARTIFACTS" >&2
+        echo "Run '$(basename "$0") build' first." >&2
+        exit 1
     fi
-    git -C "$SRC_DIR" checkout "$NDPI_REF"
-    git -C "$SRC_DIR" pull --ff-only 2>/dev/null || true
 
-    echo ""
-    echo "── Building libndpi ──"
-    cd "$SRC_DIR"
-    ./autogen.sh
-    make -j"$(nproc)"
-
-    echo ""
-    echo "── Building xt_ndpi kernel module + iptables extension ──"
-    cd "$SRC_DIR/ndpi-netfilter"
-    make -j"$(nproc)"
-
-    echo ""
-    echo "── Installing module + libxt_ndpi.so ──"
-    make install
-    depmod -a
+    echo "── Installing packages ──"
+    # apt resolves the build deps (dkms, build-essential, kernel headers) and
+    # DKMS builds xt_ndpi for the running kernel during this step.
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y "${dkms[@]}" "${ipt[@]}"
 
     echo ""
     echo "── Loading module ──"
@@ -104,6 +91,8 @@ build_module() {
 
     echo ""
     echo "── Verifying ──"
+    dkms status xt-ndpi 2>/dev/null | grep -q installed \
+        || { echo "ERROR: xt-ndpi DKMS module not installed" >&2; exit 1; }
     lsmod | grep -q '^xt_ndpi' || { echo "ERROR: xt_ndpi not loaded" >&2; exit 1; }
     iptables -m ndpi --help >/dev/null 2>&1 \
         || { echo "ERROR: iptables -m ndpi extension not found (libxt_ndpi.so missing?)" >&2; exit 1; }
@@ -191,22 +180,17 @@ SERVICE_EOF
 }
 
 do_install() {
-    build_module
+    require_root install
+    install_packages
     install_rule_manager
     echo ""
     echo "Done. BitTorrent traffic through the VPN is now being dropped."
-    echo "Note: after a kernel upgrade run 'sudo $(basename "$0") rebuild'."
-}
-
-do_rebuild() {
-    build_module
-    systemctl restart ndpi-filter.service 2>/dev/null || true
-    echo ""
-    echo "Done. xt_ndpi rebuilt for kernel $(uname -r) and rule re-applied."
+    echo "DKMS will rebuild xt_ndpi automatically on kernel upgrades."
 }
 
 do_uninstall() {
-    echo "This will stop BitTorrent blocking and remove the xt_ndpi module."
+    require_root uninstall
+    echo "This will stop BitTorrent blocking and remove the xt-ndpi packages."
     read -rp "Continue? [y/N] " confirm
     if [[ "$confirm" != [yY] ]]; then
         echo "Aborted."
@@ -221,20 +205,23 @@ do_uninstall() {
     systemctl daemon-reload 2>/dev/null || true
 
     echo ""
-    echo "── Unloading + removing module ──"
+    echo "── Removing packages ──"
     modprobe -r xt_ndpi 2>/dev/null || true
     rm -f "$MODULES_CONF"
-    if [[ -d "$SRC_DIR/ndpi-netfilter" ]]; then
-        make -C "$SRC_DIR/ndpi-netfilter" uninstall 2>/dev/null || true
-    fi
-    depmod -a 2>/dev/null || true
-    rm -rf "$SRC_DIR"
+    DEBIAN_FRONTEND=noninteractive apt-get purge -y xt-ndpi-iptables xt-ndpi-dkms 2>/dev/null || true
 
     echo ""
-    echo "Done. xt_ndpi and BitTorrent blocking removed."
+    echo "Done. xt-ndpi and BitTorrent blocking removed."
 }
 
 do_status() {
+    echo "── Packages ──"
+    dpkg-query -W -f='  ${Package} ${Version} (${db:Status-Status})\n' \
+        xt-ndpi-dkms xt-ndpi-iptables 2>/dev/null || echo "  not installed"
+    echo ""
+    echo "── DKMS ──"
+    dkms status xt-ndpi 2>/dev/null || echo "  (none)"
+    echo ""
     echo "── Module ──"
     lsmod | grep '^xt_ndpi' || echo "  xt_ndpi not loaded"
     echo ""
@@ -248,8 +235,8 @@ do_status() {
 }
 
 case "${1:-}" in
+    build)     do_build ;;
     install)   do_install ;;
-    rebuild)   do_rebuild ;;
     uninstall) do_uninstall ;;
     status)    do_status ;;
     *)         usage ;;
