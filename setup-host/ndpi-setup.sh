@@ -122,7 +122,7 @@ install_rule_manager() {
 set -euo pipefail
 # Manage the BitTorrent DROP rule in Docker's DOCKER-USER chain.
 CHAIN="DOCKER-USER"
-MATCH=(-m ndpi --bittorrent -j DROP)
+MATCH=(-m ndpi --proto bittorrent -j DROP)
 
 apply_one() {
     local ipt="$1"

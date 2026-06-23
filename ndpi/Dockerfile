@@ -39,7 +39,8 @@ RUN --mount=type=cache,target=/var/lib/apt/lists/,sharing=private \
     apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates git \
         build-essential debhelper dh-dkms dpkg-dev fakeroot rsync \
-        autoconf automake libtool pkg-config gettext
+         autoconf automake libtool pkg-config gettext \
+        libxtables-dev
 
 ARG NDPI_REPO=https://github.com/vel21ripn/nDPI.git
 # Empty by default -> falls back to the pinned ./NDPI_REF file.
@@ -62,7 +63,7 @@ RUN cd src && ./autogen.sh >/dev/null 2>&1; test -x configure
 # Overlay our packaging and build a binary-only, unsigned .deb (unprivileged).
 COPY --chown=${USER_NAME} debian/ /build/src/debian/
 RUN cd src && chmod +x debian/rules && dpkg-buildpackage -us -uc -b \
-    && cp /build/xt-ndpi-dkms_*.deb /artifacts/
+    && cp /build/xt-ndpi-dkms_*.deb /build/xt-ndpi-iptables_*.deb /artifacts/
 
 # Minimal final layer: just the .deb in /artifacts, owned by the host-mapped
 # user. /artifacts is baked into the image; the host folder is bind-mounted at

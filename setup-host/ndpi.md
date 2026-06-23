@@ -13,7 +13,7 @@ torrents and DHT/uTP — not just plaintext handshakes or well-known ports.
 VPN client ──▶ wg0 (inside container) ──▶ MASQUERADE (inside container)
           ──▶ docker bridge ──▶ host FORWARD ──▶ uplink
                                       ▲
-                          DOCKER-USER chain: -m ndpi --bittorrent -j DROP
+                          DOCKER-USER chain: -m ndpi --proto bittorrent -j DROP
 ```
 
 - `xt_ndpi.ko` (kernel module) + `libxt_ndpi.so` (iptables extension) are built
@@ -77,7 +77,7 @@ client traffic). To limit it to specific exit networks, edit `MATCH` in
 `/usr/local/sbin/ndpi-filter` to add a source subnet, e.g.:
 
 ```bash
-MATCH=(-s 172.100.0.0/24 -m ndpi --bittorrent -j DROP)
+MATCH=(-s 172.100.0.0/24 -m ndpi --proto bittorrent -j DROP)
 ```
 
 ## Remove

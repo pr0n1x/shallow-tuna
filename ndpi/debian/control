@@ -1,4 +1,4 @@
-Source: xt-ndpi-dkms
+Source: xt-ndpi
 Section: kernel
 Priority: optional
 Maintainer: shalokh-vpn <maximmaclaude@gmail.com>
@@ -6,6 +6,8 @@ Build-Depends:
  debhelper-compat (= 13),
  dh-dkms,
  rsync,
+ libxtables-dev,
+ pkg-config,
 Standards-Version: 4.6.2
 Rules-Requires-Root: no
 
@@ -23,5 +25,20 @@ Description: nDPI xt_ndpi netfilter module (DKMS source)
  and automatically rebuilds it on every kernel upgrade, so the module keeps
  loading across reboots without manual intervention.
  .
- Note: using the "-m ndpi" match from iptables additionally requires the
- userspace libxt_ndpi.so xtables extension, which is not shipped here.
+ Using the "-m ndpi" match from iptables also requires the userspace
+ xtables extension in the xt-ndpi-iptables package.
+
+Package: xt-ndpi-iptables
+Architecture: any
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+ xt-ndpi-dkms (= ${source:Version}),
+ iptables,
+Description: nDPI iptables extension (libxt_ndpi.so)
+ Userspace xtables extension implementing the "-m ndpi" match for
+ iptables/ip6tables, used to act on flows classified by nDPI (e.g.
+ "-m ndpi --proto bittorrent -j DROP"). Built from the same nDPI revision as
+ xt-ndpi-dkms so the protocol IDs stay in lockstep with the kernel module.
+ Depends on xt-ndpi-dkms because the match is inert without the xt_ndpi
+ kernel module loaded.

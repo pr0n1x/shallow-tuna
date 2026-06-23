@@ -1,7 +1,7 @@
 #!/usr/bin/make -f
-# DKMS packaging for the nDPI xt_ndpi netfilter kernel module.
-# The package ships only source to /usr/src/<name>-<ver>; DKMS builds the
-# module against each kernel on the target (and auto-rebuilds on upgrade).
+# Packaging for the nDPI xt_ndpi netfilter stack:
+#   xt-ndpi-dkms      - kernel module source, built per-kernel by DKMS
+#   xt-ndpi-iptables  - libxt_ndpi.so userspace "-m ndpi" iptables extension
 
 export DH_VERBOSE = 1
 
@@ -10,36 +10,44 @@ DKMS_VER  = $(shell dpkg-parsechangelog -SVersion)
 
 CURDIR ?= $(shell pwd)
 SRCDST  = $(CURDIR)/debian/xt-ndpi-dkms/usr/src/$(DKMS_NAME)-$(DKMS_VER)
+IPTDST  = $(CURDIR)/debian/xt-ndpi-iptables
 
 %:
 	dh $@ --with dkms
 
 # Run upstream configure ONCE here (build host) to generate the arch-neutral
-# headers (ndpi_config.h, ndpi_define.h) the module needs. --with-only-libndpi
-# keeps it lean (no libpcap/flex/bison; bundled gcrypt-light). Doing this at
-# package-build time lets us ship a tiny pre-configured source subset and skip
-# autotools entirely on the target — DKMS then only runs `make`.
+# headers (ndpi_config.h, ndpi_define.h) needed by both the module source and
+# the iptables extension. --with-only-libndpi keeps it lean (no
+# libpcap/flex/bison; bundled gcrypt-light). For the DKMS package this lets us
+# ship a tiny pre-configured source subset and skip autotools on the target.
 override_dh_auto_configure:
 	./configure --with-only-libndpi
 
+# Build only the userspace iptables extension (libxt_ndpi.so) for the
+# xt-ndpi-iptables package. The kernel module is NOT built here — DKMS builds
+# it on the target.
 override_dh_auto_build:
+	$(MAKE) -C ndpi-netfilter/ipt
 
 override_dh_auto_test:
 
-# Stage ONLY what the kernel module build needs: src/ (lib + the generated
-# headers) and ndpi-netfilter/. This drops ~400MB of tests/fuzz/dga/doc data
-# the module never touches. Staging happens in the install phase (after
-# dh_prep, which wipes debian/<pkg> at the start of install). Build artifacts
-# are excluded so the on-target build starts clean.
+# Two install targets:
+#  - xt-ndpi-dkms: stage ONLY what the kernel module build needs (src/ +
+#    ndpi-netfilter/), dropping ~400MB of tests/fuzz/dga/doc data. Done in the
+#    install phase (after dh_prep wipes debian/<pkg>). '*.so' is excluded so the
+#    libxt_ndpi.so just built by dh_auto_build doesn't leak into the source.
+#  - xt-ndpi-iptables: install libxt_ndpi.so (+ libxt_NDPI.so symlink) into the
+#    arch xtables plugin dir via the upstream Makefile.
 override_dh_auto_install:
 	mkdir -p $(SRCDST)
 	rsync -a \
-	  --exclude='*.o' --exclude='*.ko' \
+	  --exclude='*.o' --exclude='*.ko' --exclude='*.so' \
 	  --exclude='*.cmd' --exclude='.*.cmd' \
 	  --exclude='*.mod' --exclude='*.mod.c' \
 	  --exclude='Module.symvers' --exclude='modules.order' \
 	  --exclude='windows' --exclude='*~' \
 	  src ndpi-netfilter $(SRCDST)/
+	$(MAKE) -C ndpi-netfilter/ipt install DESTDIR=$(IPTDST)
 
 # Stamp the DKMS source version to match this package version.
 override_dh_dkms:
