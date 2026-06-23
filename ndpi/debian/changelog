@@ -1,0 +1,8 @@
+xt-ndpi-dkms (5.1.0+git20260623) noble; urgency=medium
+
+  * Initial DKMS packaging of the nDPI xt_ndpi netfilter kernel module.
+  * Built from the vel21ripn/nDPI fork (kernel 6.8.x fixes).
+  * DKMS builds xt_ndpi against the running kernel and auto-rebuilds it on
+    every kernel upgrade.
+
+ -- shalokh-vpn <maximmaclaude@gmail.com>  Tue, 23 Jun 2026 00:00:00 +0000

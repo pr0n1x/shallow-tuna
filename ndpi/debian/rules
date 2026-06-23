@@ -1,0 +1,46 @@
+#!/usr/bin/make -f
+# DKMS packaging for the nDPI xt_ndpi netfilter kernel module.
+# The package ships only source to /usr/src/<name>-<ver>; DKMS builds the
+# module against each kernel on the target (and auto-rebuilds on upgrade).
+
+export DH_VERBOSE = 1
+
+DKMS_NAME = xt-ndpi
+DKMS_VER  = $(shell dpkg-parsechangelog -SVersion)
+
+CURDIR ?= $(shell pwd)
+SRCDST  = $(CURDIR)/debian/xt-ndpi-dkms/usr/src/$(DKMS_NAME)-$(DKMS_VER)
+
+%:
+	dh $@ --with dkms
+
+# Run upstream configure ONCE here (build host) to generate the arch-neutral
+# headers (ndpi_config.h, ndpi_define.h) the module needs. --with-only-libndpi
+# keeps it lean (no libpcap/flex/bison; bundled gcrypt-light). Doing this at
+# package-build time lets us ship a tiny pre-configured source subset and skip
+# autotools entirely on the target — DKMS then only runs `make`.
+override_dh_auto_configure:
+	./configure --with-only-libndpi
+
+override_dh_auto_build:
+
+override_dh_auto_test:
+
+# Stage ONLY what the kernel module build needs: src/ (lib + the generated
+# headers) and ndpi-netfilter/. This drops ~400MB of tests/fuzz/dga/doc data
+# the module never touches. Staging happens in the install phase (after
+# dh_prep, which wipes debian/<pkg> at the start of install). Build artifacts
+# are excluded so the on-target build starts clean.
+override_dh_auto_install:
+	mkdir -p $(SRCDST)
+	rsync -a \
+	  --exclude='*.o' --exclude='*.ko' \
+	  --exclude='*.cmd' --exclude='.*.cmd' \
+	  --exclude='*.mod' --exclude='*.mod.c' \
+	  --exclude='Module.symvers' --exclude='modules.order' \
+	  --exclude='windows' --exclude='*~' \
+	  src ndpi-netfilter $(SRCDST)/
+
+# Stamp the DKMS source version to match this package version.
+override_dh_dkms:
+	dh_dkms -V $(DKMS_VER)

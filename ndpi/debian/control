@@ -1,0 +1,27 @@
+Source: xt-ndpi-dkms
+Section: kernel
+Priority: optional
+Maintainer: shalokh-vpn <maximmaclaude@gmail.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ dh-dkms,
+ rsync,
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+
+Package: xt-ndpi-dkms
+Architecture: all
+Depends:
+ ${misc:Depends},
+ dkms,
+ build-essential,
+ linux-headers-generic | linux-headers-amd64 | linux-headers-arm64 | linux-headers,
+Description: nDPI xt_ndpi netfilter module (DKMS source)
+ Out-of-tree netfilter kernel module providing the iptables/ip6tables
+ "-m ndpi" match, built from the vel21ripn nDPI fork (carries the kernel
+ 6.8.x fixes). DKMS compiles xt_ndpi against the running kernel on install
+ and automatically rebuilds it on every kernel upgrade, so the module keeps
+ loading across reboots without manual intervention.
+ .
+ Note: using the "-m ndpi" match from iptables additionally requires the
+ userspace libxt_ndpi.so xtables extension, which is not shipped here.
