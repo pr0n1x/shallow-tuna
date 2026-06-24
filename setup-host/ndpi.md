@@ -83,9 +83,10 @@ classifies a flow after its first few packets, so the very first packets of
 each connection pass before the flow is tagged — the connection still dies,
 it's just not a packet-1 block.
 
-> **Backend note:** the service uses `iptables-legacy` (what `xt_ndpi` was
-> validated against). It must match the backend dockerd uses for `DOCKER-USER`;
-> a legacy/nft mismatch silently no-ops the rule.
+> **Backend note:** `manage.sh` auto-detects which iptables backend owns the
+> target chain (legacy vs nft) and uses that, so it follows whatever dockerd
+> chose for `DOCKER-USER`. If the chain exists in neither backend it fails
+> loudly (the container exits) rather than silently doing nothing.
 
 ## Remove
 
