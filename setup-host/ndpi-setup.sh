@@ -37,6 +37,7 @@ Usage: $base_name <command>
 Commands:
   build       Build the .deb packages with Docker Compose (no root needed)
   install     Install xt-ndpi-dkms (the host kernel module)
+  verify      Check the module is DKMS-installed and load it
   uninstall   Remove the kernel module package
   status      Show package / module state
 
@@ -64,6 +65,38 @@ do_build() {
     ls -1 "$ARTIFACTS"/*.deb
 }
 
+# Confirm the DKMS module built+installed, then best-effort load it. Returns
+# non-zero only if DKMS didn't install it (a not-loaded-right-now state is a
+# NOTE, since it loads at boot / when the service starts). Needs root (modprobe).
+verify_module() {
+    echo "── Verifying ──"
+    dkms status xt-ndpi 2>/dev/null | grep -q installed \
+        || { echo "ERROR: xt-ndpi DKMS module not built/installed" >&2; return 1; }
+
+    # A reload can be deferred if the OLD module is still in use (e.g. a running
+    # xt-ndpi-rules holding the -m ndpi rule); the module is a livepatch, so a
+    # reinstall unloads it until boot/start.
+    local loadout
+    loadout="$(modprobe xt_ndpi 2>&1)" || true
+    # Read /proc/modules directly: `lsmod | grep -q` would SIGPIPE lsmod under
+    # `set -o pipefail` (grep -q exits on first match) and falsely report
+    # "not loaded" when the module IS loaded.
+    if grep -q '^xt_ndpi ' /proc/modules; then
+        echo "xt_ndpi installed and loaded."
+    else
+        echo "NOTE: xt-ndpi-dkms is installed, but xt_ndpi is not loaded right now."
+        [ -n "$loadout" ] && echo "      modprobe: $loadout"
+        echo "      It loads at boot and when xt-ndpi-rules starts. If that"
+        echo "      service is already running, restart it after this reinstall:"
+        echo "        docker compose up -d xt-ndpi-rules"
+    fi
+}
+
+do_verify() {
+    require_root verify
+    verify_module
+}
+
 do_install() {
     require_root install
     shopt -s nullglob
@@ -78,19 +111,17 @@ do_install() {
     # apt resolves the build deps (dkms, build-essential, kernel headers) and
     # DKMS builds xt_ndpi for the running kernel during this step. The package
     # also ships a modules-load.d entry, so xt_ndpi auto-loads at boot.
+    # APT::Sandbox::User=root: the .deb lives under $HOME (mode 0750), which the
+    # sandboxed '_apt' user can't read — keep the install as root to avoid the
+    # "Download is performed unsandboxed" permission notice.
     apt-get update
-    DEBIAN_FRONTEND=noninteractive apt-get install -y "${dkms[@]}"
+    DEBIAN_FRONTEND=noninteractive \
+        apt-get install -y -o APT::Sandbox::User=root "${dkms[@]}"
 
     echo ""
-    echo "── Verifying ──"
-    modprobe xt_ndpi
-    dkms status xt-ndpi 2>/dev/null | grep -q installed \
-        || { echo "ERROR: xt-ndpi DKMS module not installed" >&2; exit 1; }
-    lsmod | grep -q '^xt_ndpi' || { echo "ERROR: xt_ndpi not loaded" >&2; exit 1; }
-
+    verify_module || exit 1
     echo ""
-    echo "xt_ndpi installed and loaded."
-    echo "Now bring up the rule service:  docker compose up -d --build xt-ndpi-rules"
+    echo "Next: docker compose up -d --build xt-ndpi-rules"
 }
 
 do_uninstall() {
@@ -130,6 +161,7 @@ do_status() {
 case "${1:-}" in
     build)     do_build ;;
     install)   do_install ;;
+    verify)    do_verify ;;
     uninstall) do_uninstall ;;
     status)    do_status ;;
     *)         usage ;;

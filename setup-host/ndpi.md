@@ -55,12 +55,28 @@ On the `xt-ndpi-rules` service in `docker-compose.yml`:
 
 ```yaml
 environment:
-  - NDPI_CHAIN=DOCKER-USER     # chain to apply rules to
-  - NDPI_DROP=bittorrent       # comma-separated nDPI protocols to drop
+  - NDPI_CHAIN=DOCKER-USER                       # chain to apply rules to
+  - NDPI_DROP=bittorrent                         # nDPI protocols (comma list)
+  - NDPI_SOURCE=172.100.0.0/24,172.101.0.0/24    # which exits to enforce on
 ```
 
-Change it (e.g. `NDPI_DROP=bittorrent,tor`) and `docker compose up -d
-xt-ndpi-rules` to re-apply.
+`NDPI_SOURCE` scopes the rule to **source subnets** so it only touches VPN
+traffic, not everything forwarded. Because traffic is MASQUERADEd to its exit
+subnet inside the container, the source seen on `DOCKER-USER` is the exit
+network — so each subnet = one exit:
+
+| Exit  | Subnet            |
+|-------|-------------------|
+| exit1 | `172.100.0.0/24`  |
+| exit2 | `172.101.0.0/24`  |
+
+**Choose which exits enforce blocking** by listing their subnets:
+
+- both exits → `NDPI_SOURCE=172.100.0.0/24,172.101.0.0/24`
+- only exit1 → `NDPI_SOURCE=172.100.0.0/24`
+- everything forwarded (not just VPN) → `NDPI_SOURCE=` (empty)
+
+After changing any of these, `docker compose up -d xt-ndpi-rules` to re-apply.
 
 ## Maintenance — kernel upgrades
 

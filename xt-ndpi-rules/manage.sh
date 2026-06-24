@@ -6,15 +6,20 @@ set -euo pipefail
 # on the host's iptables — the same place dockerd creates DOCKER-USER.
 #
 # Env:
-#   NDPI_CHAIN   chain to use (default: DOCKER-USER)
-#   NDPI_DROP    comma-separated nDPI protocols to drop (e.g. "bittorrent")
+#   NDPI_CHAIN    chain to use (default: DOCKER-USER)
+#   NDPI_DROP     comma-separated nDPI protocols to drop (e.g. "bittorrent")
+#   NDPI_SOURCE   optional comma-separated source scopes (CIDRs). Empty = all
+#                 forwarded traffic. Set to one exit subnet to restrict to it,
+#                 e.g. "172.100.0.0/24" (exit1). v4 scopes apply to iptables,
+#                 v6 scopes to ip6tables.
 #
-# Each protocol becomes "-m ndpi --proto <p> -j DROP" on iptables + ip6tables.
+# Each (source × protocol) becomes "[-s <src>] -m ndpi --proto <p> -j DROP".
 # Requires the host xt_ndpi kernel module (xt-ndpi-dkms) and the bundled
 # libxt_ndpi.so extension.
 
 CHAIN="${NDPI_CHAIN:-DOCKER-USER}"
 PROTOS="${NDPI_DROP:-}"
+SOURCES="${NDPI_SOURCE:-}"
 
 if [ -z "$PROTOS" ]; then
     echo "ERROR: NDPI_DROP not set (comma-separated nDPI protocols)" >&2
@@ -58,43 +63,58 @@ case "$BACKEND" in
 esac
 echo "ndpi-rules: chain $CHAIN -> $BACKEND backend" >&2
 
-apply_one() {
-    local ipt="$1" proto="$2"
-    # The chain may be absent for one family (e.g. no IPv6 DOCKER-USER).
-    "$ipt" -n -L "$CHAIN" >/dev/null 2>&1 || return 0
-    "$ipt" -C "$CHAIN" -m ndpi --proto "$proto" -j DROP 2>/dev/null \
-        || "$ipt" -I "$CHAIN" 1 -m ndpi --proto "$proto" -j DROP
+is_v6() { case "$1" in *:*) return 0 ;; *) return 1 ;; esac; }
+csv()   { local s="${1// /}"; local IFS=','; printf '%s\n' $s; }   # one token/line
+
+# Build the iptables match args for a (source, protocol) into the named array.
+build_spec() {  # <array-name> <src> <proto>
+    local -n _out="$1"; local src="$2" proto="$3"
+    _out=()
+    if [ -n "$src" ]; then _out=(-s "$src"); fi
+    _out+=(-m ndpi --proto "$proto" -j DROP)
 }
 
-remove_one() {
-    local ipt="$1" proto="$2"
+apply_one() {   # <ipt> <src> <proto>
+    local ipt="$1"; local -a spec; build_spec spec "$2" "$3"
     "$ipt" -n -L "$CHAIN" >/dev/null 2>&1 || return 0
-    while "$ipt" -C "$CHAIN" -m ndpi --proto "$proto" -j DROP 2>/dev/null; do
-        "$ipt" -D "$CHAIN" -m ndpi --proto "$proto" -j DROP
+    "$ipt" -C "$CHAIN" "${spec[@]}" 2>/dev/null \
+        || "$ipt" -I "$CHAIN" 1 "${spec[@]}"
+}
+
+remove_one() {  # <ipt> <src> <proto>
+    local ipt="$1"; local -a spec; build_spec spec "$2" "$3"
+    "$ipt" -n -L "$CHAIN" >/dev/null 2>&1 || return 0
+    while "$ipt" -C "$CHAIN" "${spec[@]}" 2>/dev/null; do
+        "$ipt" -D "$CHAIN" "${spec[@]}"
     done
 }
 
-for_each() {
-    local action="$1" proto
-    IFS=','
-    for proto in $PROTOS; do
-        proto="$(echo "$proto" | tr -d '[:space:]')"
-        [ -z "$proto" ] && continue
-        "$action" "$IPT"  "$proto"
-        "$action" "$IP6T" "$proto"
+for_each() {    # <action>
+    local action="$1" proto src
+    for proto in $(csv "$PROTOS"); do
+        if [ -z "$SOURCES" ]; then
+            "$action" "$IPT"  "" "$proto"
+            "$action" "$IP6T" "" "$proto"
+        else
+            for src in $(csv "$SOURCES"); do
+                if is_v6 "$src"; then "$action" "$IP6T" "$src" "$proto"
+                else                  "$action" "$IPT"  "$src" "$proto"; fi
+            done
+        fi
     done
-    unset IFS
 }
+
+scope_desc() { [ -n "$SOURCES" ] && echo "from [$SOURCES]" || echo "(all sources)"; }
 
 case "$ACTION" in
     attach)
         modprobe xt_ndpi 2>/dev/null || true
         for_each apply_one
-        echo "ndpi-rules: dropping [$PROTOS] on $CHAIN"
+        echo "ndpi-rules: dropping [$PROTOS] $(scope_desc) on $CHAIN"
         ;;
     detach)
         for_each remove_one
-        echo "ndpi-rules: removed [$PROTOS] from $CHAIN"
+        echo "ndpi-rules: removed [$PROTOS] $(scope_desc) from $CHAIN"
         ;;
     status)
         echo "== $IPT $CHAIN =="
