@@ -4,9 +4,9 @@ Drops BitTorrent traffic transiting the VPN using **nDPI deep packet
 inspection**. Detection is flow-based, so it catches **encrypted (MSE/PE)**
 torrents and DHT/uTP — not just plaintext handshakes or well-known ports.
 
-> **Target:** Ubuntu 24.04. `xt_ndpi` is an out-of-tree kernel module shipped
-> as DKMS packages (see [`../ndpi`](../ndpi)); DKMS builds it against the
-> running kernel and rebuilds it **automatically** on kernel upgrades.
+> **Target:** Ubuntu 24.04. The `xt_ndpi` kernel module ships as a DKMS package
+> (see [`../ndpi`](../ndpi)); DKMS builds it against the running kernel and
+> rebuilds it **automatically** on kernel upgrades.
 
 ## How it works
 
@@ -17,88 +17,90 @@ VPN client ──▶ wg0 (inside container) ──▶ MASQUERADE (inside contain
                           DOCKER-USER chain: -m ndpi --proto bittorrent -j DROP
 ```
 
-- `xt_ndpi.ko` (from `xt-ndpi-dkms`) + `libxt_ndpi.so` (from `xt-ndpi-iptables`)
-  are installed on the **host**. The module is global to the host kernel; the
-  iptables extension cannot run inside the Alpine/musl VPN containers, so the
-  rule is enforced on the host.
-- VPN client traffic is MASQUERADEd inside the container and then forwarded by
-  the host, so it passes through the host `FORWARD` chain. The rule is placed in
-  Docker's **`DOCKER-USER`** chain — the supported hook for user rules there,
-  and one Docker does not flush on container restart.
-- A `ndpi-filter.service` systemd unit (`PartOf=docker.service`) re-applies
-  the rule every time Docker (re)starts, since dockerd recreates `DOCKER-USER`.
+Two pieces, split by what can be containerized:
+
+- **`xt_ndpi.ko` — on the host** (`xt-ndpi-dkms`). A kernel module can't live in
+  a container; DKMS builds it against the host kernel and auto-loads it at boot.
+- **The DROP rule — the `xt-ndpi-rules` compose service.** A `network_mode:
+  host` container (mirroring `host-routing`) that bundles `libxt_ndpi.so` and
+  runs `manage.sh attach`/`detach` to add/remove the `-m ndpi` rule on the
+  host's **`DOCKER-USER`** chain — the supported hook for user rules, not
+  flushed on container restart. It must be a Debian/Ubuntu image (the glibc
+  `libxt_ndpi.so` can't load under Alpine/musl).
+
+The rule (which protocols, which chain) is service config in
+`docker-compose.yml` — `NDPI_DROP` / `NDPI_CHAIN` — not a host file.
 
 ## Install
 
-First build the `.deb` packages with Docker Compose (no root needed), then
-install them:
-
 ```bash
-./setup-host/ndpi-setup.sh build      # -> ../ndpi/artifacts/*.deb
+# 1. Build the .deb packages (no root needed)
+./setup-host/ndpi-setup.sh build            # -> ../ndpi/artifacts/*.deb
+
+# 2. Install the host kernel module (DKMS builds + auto-loads xt_ndpi)
 sudo ./setup-host/ndpi-setup.sh install
+
+# 3. Bring up the rule service (builds its image from the iptables .deb)
+docker compose up -d --build xt-ndpi-rules
 ```
 
-`install` apt-installs `xt-ndpi-dkms` + `xt-ndpi-iptables` + `xt-ndpi-filter`
-(DKMS builds `xt_ndpi` against the running kernel; the packages provide the
-`-m ndpi` match and the `ndpi-filter` rule engine + `xt_ndpi` autoload). It
-then writes the rule config to `/etc/default/ndpi-filter` and enables
-`ndpi-filter.service`.
+`build` produces `xt-ndpi-dkms` (installed on the host) and `xt-ndpi-iptables`
+(its `libxt_ndpi.so` is baked into the `xt-ndpi-rules` image). The nDPI revision
+is pinned in [`../ndpi/NDPI_REF`](../ndpi/NDPI_REF); override per build with
+`NDPI_REF=<tag|commit> ./setup-host/ndpi-setup.sh build`.
 
-The nDPI revision is pinned in [`../ndpi/NDPI_REF`](../ndpi/NDPI_REF); override
-per-build with `NDPI_REF=<tag|commit> ./setup-host/ndpi-setup.sh build`.
+## Configure the rule
+
+On the `xt-ndpi-rules` service in `docker-compose.yml`:
+
+```yaml
+environment:
+  - NDPI_CHAIN=DOCKER-USER     # chain to apply rules to
+  - NDPI_DROP=bittorrent       # comma-separated nDPI protocols to drop
+```
+
+Change it (e.g. `NDPI_DROP=bittorrent,tor`) and `docker compose up -d
+xt-ndpi-rules` to re-apply.
 
 ## Maintenance — kernel upgrades
 
 Nothing to do. DKMS rebuilds `xt_ndpi` for the new kernel automatically on
-upgrade (via `/etc/kernel/postinst.d/dkms`), so blocking keeps working across
-reboots without intervention.
+upgrade (via `/etc/kernel/postinst.d/dkms`), so it keeps loading across reboots.
 
 ## Verify it's working
 
 ```bash
-sudo ./setup-host/ndpi-setup.sh status
+sudo ./setup-host/ndpi-setup.sh status          # module + package + service
+docker logs xt-ndpi-rules                        # "dropping [bittorrent] on DOCKER-USER"
 
-# rule counters should climb while a test torrent is running:
+# rule counters should climb while a test torrent runs:
 sudo iptables -n -L DOCKER-USER -v --line-numbers | grep ndpi
 ```
 
 Functional test: connect a client to the VPN, start a well-seeded torrent
-(e.g. a Linux ISO), confirm peers fail to connect / transfer stalls. Note that
-nDPI classifies a flow after its first few packets, so the *very* first packets
-of each connection pass before the flow is tagged and dropped — the connection
-still dies, it's just not a packet-1 block.
+(e.g. a Linux ISO), confirm peers fail to connect / transfer stalls. nDPI
+classifies a flow after its first few packets, so the very first packets of
+each connection pass before the flow is tagged — the connection still dies,
+it's just not a packet-1 block.
 
-## Scope (optional)
-
-By default **all** forwarded BitTorrent is dropped (every flow on a VPN exit is
-client traffic). The rule engine (`xt-ndpi-filter`) is generic — edit the
-`NDPI_RULES` / `NDPI_CHAIN` config in `/etc/default/ndpi-filter` (and re-run
-`sudo systemctl restart ndpi-filter`) to scope it or block other protocols,
-e.g. limit to a subnet:
-
-```bash
-NDPI_CHAIN="DOCKER-USER"
-NDPI_RULES=(
-  "-s 172.100.0.0/24 -m ndpi --proto bittorrent -j DROP"
-)
-```
-
-The canonical config is written by `ndpi-setup.sh`'s `write_config()`.
+> **Backend note:** the service uses `iptables-legacy` (what `xt_ndpi` was
+> validated against). It must match the backend dockerd uses for `DOCKER-USER`;
+> a legacy/nft mismatch silently no-ops the rule.
 
 ## Remove
 
 ```bash
-sudo ./setup-host/ndpi-setup.sh uninstall
+docker compose down xt-ndpi-rules          # detaches the rule, stops the service
+sudo ./setup-host/ndpi-setup.sh uninstall  # unloads + purges the kernel module
 ```
 
-Disables the service, removes the rule, unloads the module, and purges the
-`xt-ndpi-dkms` / `xt-ndpi-iptables` packages.
-
-## Commands
+## Commands (`ndpi-setup.sh`)
 
 | Command     | Action                                                        |
 |-------------|---------------------------------------------------------------|
 | `build`     | Build the `.deb` packages with Docker Compose (no root)       |
-| `install`   | Install the packages and enable BitTorrent blocking           |
-| `status`    | Show package / module / iptables extension / rule state       |
-| `uninstall` | Remove blocking and purge the packages                        |
+| `install`   | Install `xt-ndpi-dkms` (the host kernel module)               |
+| `status`    | Show package / module / rule-service state                    |
+| `uninstall` | Unload and purge the kernel module                            |
+
+The rule itself is brought up/down with `docker compose up/down xt-ndpi-rules`.

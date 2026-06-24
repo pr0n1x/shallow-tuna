@@ -1,8 +1,9 @@
 #!/usr/bin/make -f
 # Packaging for the nDPI xt_ndpi netfilter stack:
-#   xt-ndpi-dkms      - kernel module source, built per-kernel by DKMS
+#   xt-ndpi-dkms      - kernel module source (built per-kernel by DKMS) + the
+#                       modules-load.d autoload entry
 #   xt-ndpi-iptables  - libxt_ndpi.so userspace "-m ndpi" iptables extension
-#   xt-ndpi-filter     - configurable systemd rule engine (/usr/sbin/ndpi-filter)
+#                       (consumed by the xt-ndpi-rules compose service image)
 
 export DH_VERBOSE = 1
 
@@ -10,9 +11,9 @@ DKMS_NAME = xt-ndpi
 DKMS_VER  = $(shell dpkg-parsechangelog -SVersion)
 
 CURDIR ?= $(shell pwd)
-SRCDST    = $(CURDIR)/debian/xt-ndpi-dkms/usr/src/$(DKMS_NAME)-$(DKMS_VER)
-IPTDST    = $(CURDIR)/debian/xt-ndpi-iptables
-RULESDST  = $(CURDIR)/debian/xt-ndpi-filter
+DKMSDST = $(CURDIR)/debian/xt-ndpi-dkms
+SRCDST  = $(DKMSDST)/usr/src/$(DKMS_NAME)-$(DKMS_VER)
+IPTDST  = $(CURDIR)/debian/xt-ndpi-iptables
 
 %:
 	dh $@ --with dkms
@@ -33,11 +34,12 @@ override_dh_auto_build:
 
 override_dh_auto_test:
 
-# Two install targets:
+# Install targets:
 #  - xt-ndpi-dkms: stage ONLY what the kernel module build needs (src/ +
 #    ndpi-netfilter/), dropping ~400MB of tests/fuzz/dga/doc data. Done in the
 #    install phase (after dh_prep wipes debian/<pkg>). '*.so' is excluded so the
 #    libxt_ndpi.so just built by dh_auto_build doesn't leak into the source.
+#    Also ship the modules-load.d entry so xt_ndpi auto-loads at boot.
 #  - xt-ndpi-iptables: install libxt_ndpi.so (+ libxt_NDPI.so symlink) into the
 #    arch xtables plugin dir via the upstream Makefile.
 override_dh_auto_install:
@@ -49,15 +51,9 @@ override_dh_auto_install:
 	  --exclude='Module.symvers' --exclude='modules.order' \
 	  --exclude='windows' --exclude='*~' \
 	  src ndpi-netfilter $(SRCDST)/
-	$(MAKE) -C ndpi-netfilter/ipt install DESTDIR=$(IPTDST)
-	# xt-ndpi-filter: the generic rule engine + module autoload entry.
-	install -D -m0755 debian/ndpi-filter $(RULESDST)/usr/sbin/ndpi-filter
 	install -D -m0644 debian/xt_ndpi-modules-load.conf \
-	  $(RULESDST)/usr/lib/modules-load.d/xt_ndpi.conf
-
-# Install + enable ndpi-filter.service (from xt-ndpi-filter.ndpi-filter.service).
-override_dh_installsystemd:
-	dh_installsystemd --name=ndpi-filter --no-stop-on-upgrade
+	  $(DKMSDST)/usr/lib/modules-load.d/xt_ndpi.conf
+	$(MAKE) -C ndpi-netfilter/ipt install DESTDIR=$(IPTDST)
 
 # Stamp the DKMS source version to match this package version.
 override_dh_dkms:

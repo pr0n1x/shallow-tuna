@@ -65,6 +65,27 @@ services:
       - ./host-routing/daemon.sh:/app/daemon.sh:ro
     entrypoint: ["sh", "/app/daemon.sh"]
 
+  # Drops nDPI-classified traffic (default: BitTorrent) on the host's
+  # DOCKER-USER chain. Bundles libxt_ndpi.so; needs the xt_ndpi kernel module
+  # on the host (xt-ndpi-dkms). Build the .debs first: ./setup-host/ndpi-setup.sh build
+  xt-ndpi-rules:
+    build:
+      context: .
+      dockerfile: xt-ndpi-rules/Dockerfile
+    container_name: xt-ndpi-rules
+    network_mode: host
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      - NDPI_CHAIN=${NDPI_CHAIN:-DOCKER-USER}
+      - NDPI_DROP=${NDPI_DROP:-bittorrent}
+    volumes:
+      - /lib/modules:/lib/modules:ro
+      - ./xt-ndpi-rules/manage.sh:/app/manage.sh:ro
+      - ./xt-ndpi-rules/daemon.sh:/app/daemon.sh:ro
+
   wg-easy:
     image: ghcr.io/wg-easy/wg-easy:15
     container_name: wg-easy
