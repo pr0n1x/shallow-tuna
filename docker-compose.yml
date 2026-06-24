@@ -47,6 +47,36 @@ services:
       - exit1
       - exit2
 
+  wg-easy:
+    image: ghcr.io/wg-easy/wg-easy:15
+    container_name: wg-easy
+    restart: unless-stopped
+    entrypoint: [ "sh", "/routing-init.sh" ]
+    command: [ "/usr/bin/dumb-init", "node", "server/index.mjs" ]
+    environment:
+      - INSECURE=true
+      - EXIT_ROUTES=${EXIT_ROUTES:-}
+    volumes:
+      - ./data/wg:/etc/wireguard
+      - /lib/modules:/lib/modules:ro
+      - ./wg-easy/routing-init.sh:/routing-init.sh:ro
+    ports:
+      - "${WG_PORT:-51830}:${WG_PORT:-51830}/udp"
+      # Bind admin panel to localhost only — access via SSH tunnel
+      - "127.0.0.1:51831:51821/tcp"
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv4.ip_forward=1
+      - net.ipv6.conf.all.disable_ipv6=0
+      - net.ipv6.conf.all.forwarding=1
+      - net.ipv6.conf.default.forwarding=1
+    networks:
+      - exit1
+      - exit2
+
   host-routing:
     build: ./host-routing
     container_name: host-routing
@@ -113,33 +143,3 @@ services:
     networks:
       - exit2
     entrypoint: ["python3", "-c"]
-
-  wg-easy:
-    image: ghcr.io/wg-easy/wg-easy:15
-    container_name: wg-easy
-    restart: unless-stopped
-    entrypoint: ["sh", "/routing-init.sh"]
-    command: ["/usr/bin/dumb-init", "node", "server/index.mjs"]
-    environment:
-      - INSECURE=true
-      - EXIT_ROUTES=${EXIT_ROUTES:-}
-    volumes:
-      - ./data/wg:/etc/wireguard
-      - /lib/modules:/lib/modules:ro
-      - ./wg-easy/routing-init.sh:/routing-init.sh:ro
-    ports:
-      - "${WG_PORT:-51830}:${WG_PORT:-51830}/udp"
-      # Bind admin panel to localhost only — access via SSH tunnel
-      - "127.0.0.1:51831:51821/tcp"
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    sysctls:
-      - net.ipv4.conf.all.src_valid_mark=1
-      - net.ipv4.ip_forward=1
-      - net.ipv6.conf.all.disable_ipv6=0
-      - net.ipv6.conf.all.forwarding=1
-      - net.ipv6.conf.default.forwarding=1
-    networks:
-      - exit1
-      - exit2
