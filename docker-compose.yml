@@ -47,30 +47,12 @@ services:
       - exit1
       - exit2
 
-  host-routing:
-    build: ./host-routing
-    container_name: host-routing
-    network_mode: host
-    restart: unless-stopped
-    depends_on:
-      awg-easy:
-        condition: service_healthy
-    cap_add:
-      - NET_ADMIN
-    environment:
-      - EXIT_ROUTES=${EXIT_ROUTES:-}
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./host-routing/manage.sh:/app/manage.sh:ro
-      - ./host-routing/daemon.sh:/app/daemon.sh:ro
-    entrypoint: ["sh", "/app/daemon.sh"]
-
   wg-easy:
     image: ghcr.io/wg-easy/wg-easy:15
     container_name: wg-easy
     restart: unless-stopped
-    entrypoint: ["sh", "/routing-init.sh"]
-    command: ["/usr/bin/dumb-init", "node", "server/index.mjs"]
+    entrypoint: [ "sh", "/routing-init.sh" ]
+    command: [ "/usr/bin/dumb-init", "node", "server/index.mjs" ]
     environment:
       - INSECURE=true
       - EXIT_ROUTES=${EXIT_ROUTES:-}
@@ -94,3 +76,70 @@ services:
     networks:
       - exit1
       - exit2
+
+  host-routing:
+    build: ./host-routing
+    container_name: host-routing
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      awg-easy:
+        condition: service_healthy
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - EXIT_ROUTES=${EXIT_ROUTES:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./host-routing/manage.sh:/app/manage.sh:ro
+      - ./host-routing/daemon.sh:/app/daemon.sh:ro
+    entrypoint: ["sh", "/app/daemon.sh"]
+
+  # Drops nDPI-classified traffic (default: BitTorrent) on the host's
+  # DOCKER-USER chain. Bundles libxt_ndpi.so; needs the xt_ndpi kernel module
+  # on the host (xt-ndpi-dkms). Build the .debs first: ./setup-host/ndpi-setup.sh build
+  xt-ndpi-rules:
+    build:
+      context: .
+      dockerfile: xt-ndpi-rules/Dockerfile
+    container_name: xt-ndpi-rules
+    # host netns so its iptables writes into the host's tables (where dockerd
+    # creates DOCKER-USER); NET_ADMIN to edit them, SYS_MODULE to load xt_ndpi.
+    network_mode: host
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      - NDPI_CHAIN=${NDPI_CHAIN:-DOCKER-USER}
+      - NDPI_DROP=${NDPI_DROP:-bittorrent}
+      # Enforce ONLY on the VPN exit subnets (the source on DOCKER-USER after
+      # the container's MASQUERADE), so it never touches non-VPN traffic. Each
+      # entry is one exit — drop an entry to leave that exit unblocked, or set
+      # NDPI_SOURCE= (explicitly empty) to enforce on ALL forwarded traffic.
+      # ('-' not ':-' so an empty value means unscoped, unset means the default)
+      #   exit1 = 172.100.0.0/24    exit2 = 172.101.0.0/24
+      - NDPI_SOURCE=${NDPI_SOURCE-172.100.0.0/24,172.101.0.0/24}
+    volumes:
+      - /lib/modules:/lib/modules:ro
+      - ./xt-ndpi-rules/manage.sh:/app/manage.sh:ro
+      - ./xt-ndpi-rules/daemon.sh:/app/daemon.sh:ro
+
+  # Throwaway probe used by ./xt-ndpi-rules/verify.sh. Lives on the real exit1
+  # network, so traffic it sends out is forwarded through DOCKER-USER sourced
+  # from the exit1 subnet — exactly like a VPN client. Profiled, so a normal
+  # `docker compose up` never starts it; verify drives it with
+  # `docker compose run`.
+  ndpi-probe-exit1:
+    profiles: ["verify"]
+    image: python:3-slim
+    networks:
+      - exit1
+    entrypoint: ["python3", "-c"]
+
+  ndpi-probe-exit2:
+    profiles: ["verify"]
+    image: python:3-slim
+    networks:
+      - exit2
+    entrypoint: ["python3", "-c"]

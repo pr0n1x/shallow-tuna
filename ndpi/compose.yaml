@@ -1,0 +1,29 @@
+# Build the xt-ndpi-dkms .deb with a single command:
+#
+#   docker compose run --rm --build build
+#
+# The Dockerfile builds the .deb inside a clean Ubuntu 24.04 image as a user
+# mapped to your UID/GID, then this service copies it onto the host bind mount
+# ./artifacts — owned by you, not root. Override the nDPI revision with:
+#   NDPI_REF=4.12 docker compose run --rm --build build
+# (--build is required so the image — and thus the .deb — is rebuilt).
+
+services:
+  build:
+    build:
+      context: .
+      target: export
+      args:
+        NDPI_REPO: ${NDPI_REPO:-https://github.com/vel21ripn/nDPI.git}
+        NDPI_REF: ${NDPI_REF:-}
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+    image: xt-ndpi-deb-builder:local
+    volumes:
+      - ./artifacts:/export
+    command:
+      - sh
+      - -c
+      - >-
+        cp -v /artifacts/*.deb /export/ &&
+        echo && echo 'Package(s) in ./export:' && ls -l /export/*.deb

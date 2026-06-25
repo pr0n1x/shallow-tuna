@@ -1,0 +1,15 @@
+PACKAGE_NAME="xt-ndpi"
+PACKAGE_VERSION="#MODULE_VERSION#"
+
+# Build the module against the kernel DKMS is currently targeting. The package
+# ships pre-generated headers (ndpi_config.h, ndpi_define.h are arch-neutral),
+# so no ./configure / autotools are needed on the target — just a compiler and
+# the kernel headers.
+MAKE[0]="make -C ndpi-netfilter/src modules KERNEL_DIR=${kernel_source_dir}"
+CLEAN="make -C ndpi-netfilter/src clean KERNEL_DIR=${kernel_source_dir} >/dev/null 2>&1 || true"
+
+BUILT_MODULE_NAME[0]="xt_ndpi"
+BUILT_MODULE_LOCATION[0]="ndpi-netfilter/src"
+DEST_MODULE_LOCATION[0]="/extra"
+
+AUTOINSTALL="yes"

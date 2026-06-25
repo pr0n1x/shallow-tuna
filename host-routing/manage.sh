@@ -20,7 +20,10 @@ if [ -z "${EXIT_ROUTES:-}" ]; then
     exit 1
 fi
 
-# Detect the default outbound interface
+# Detect the default outbound interface.
+# NOTE: assumes all EXIT_ROUTES external IPs live on this one interface
+# (as in the README's single-NIC, multi-address setup). For external IPs
+# spread across different NICs, IFACE would need to be resolved per-IP.
 IFACE=$(ip route show default | awk '{for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}')
 if [ -z "$IFACE" ]; then
     echo "ERROR: cannot detect default outbound interface" >&2
