@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SSH_HOST="${SSH_HOST:-vpnina001}"
+SSH_HOST="${SSH_HOST:-set-your-ssh-host}"
+LOCAL_IP="${LOCAL_IP:-"127.0.0.1"}"
 
 AWG_LOCAL_PORT=51821
 AWG_REMOTE_PORT=51821
+
 WG_LOCAL_PORT=51831
 WG_REMOTE_PORT=51831
 
@@ -18,8 +20,8 @@ Manage SSH tunnels to WireGuard admin panels.
 Default ssh-host: $SSH_HOST
 
 Services:
-  awg    AmneziaWG panel (http://localhost:${AWG_LOCAL_PORT})
-  wg     WireGuard panel (http://localhost:${WG_LOCAL_PORT})
+  awg    AmneziaWG panel (http://${LOCAL_IP}:${AWG_LOCAL_PORT})
+  wg     WireGuard panel (http://${LOCAL_IP}:${WG_LOCAL_PORT})
   all    Both panels
 
 Commands:
@@ -39,7 +41,7 @@ EOF
 
 get_pid() {
     local local_port="$1" remote_port="$2"
-    pgrep -f "ssh.*-L.*${local_port}:127.0.0.1:${remote_port}.*${SSH_HOST}" 2>/dev/null || true
+    pgrep -f "ssh.*-L.*${LOCAL_IP}:${local_port}:localhost:${remote_port}.*${SSH_HOST}" 2>/dev/null || true
 }
 
 do_start_one() {
@@ -48,15 +50,15 @@ do_start_one() {
     pid=$(get_pid "$local_port" "$remote_port")
     if [[ -n "$pid" ]]; then
         echo "$name: already running (pid $pid)"
-        echo "  Panel: http://localhost:${local_port}"
+        echo "  Panel: http://${LOCAL_IP}:${local_port}"
         return
     fi
 
-    ssh -f -N -L "${local_port}:127.0.0.1:${remote_port}" "$SSH_HOST" \
+    ssh -f -N -L "${LOCAL_IP}:${local_port}:localhost:${remote_port}" "$SSH_HOST" \
         -o ExitOnForwardFailure=yes
 
     echo "$name: tunnel opened"
-    echo "  Panel: http://localhost:${local_port}"
+    echo "  Panel: http://${LOCAL_IP}:${local_port}"
 }
 
 do_stop_one() {
@@ -78,7 +80,7 @@ do_status_one() {
     pid=$(get_pid "$local_port" "$remote_port")
     if [[ -n "$pid" ]]; then
         echo "$name: running (pid $pid)"
-        echo "  Panel: http://localhost:${local_port}"
+        echo "  Panel: http://${LOCAL_IP}:${local_port}"
     else
         echo "$name: not running"
     fi
