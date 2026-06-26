@@ -1,14 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="${TUNA_ADM_ENV:-${SCRIPT_DIR}/tuna-adm.env}"
+if [[ -f "$ENV_FILE" ]]; then
+    set -a
+    # shellcheck source=/dev/null
+    source "$ENV_FILE"
+    set +a
+fi
+
 SSH_HOST="${TUNA_ADM_SSH_HOST:-your-ssh-tuna-host}"
-LOCAL_IP="${TUNA_LOCAL_IP:-"127.0.0.1"}"
+LOCAL_IP="${TUNA_ADM_LOCAL_IP:-127.0.0.1}"
 
-AWG_LOCAL_PORT=51821
-AWG_REMOTE_PORT=51821
+AWG_LOCAL_PORT="${TUNA_ADM_AWG_LOCAL_PORT:-51821}"
+AWG_REMOTE_PORT="${TUNA_ADM_AWG_REMOTE_PORT:-51821}"
 
-WG_LOCAL_PORT=51831
-WG_REMOTE_PORT=51831
+WG_LOCAL_PORT="${TUNA_ADM_WG_LOCAL_PORT:-51831}"
+WG_REMOTE_PORT="${TUNA_ADM_WG_REMOTE_PORT:-51831}"
 
 usage() {
     local base_name
