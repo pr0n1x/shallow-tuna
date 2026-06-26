@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SSH_HOST="${SSH_HOST:-set-your-ssh-host}"
-LOCAL_IP="${LOCAL_IP:-"127.0.0.1"}"
+SSH_HOST="${TUNA_ADM_SSH_HOST:-your-ssh-tuna-host}"
+LOCAL_IP="${TUNA_LOCAL_IP:-"127.0.0.1"}"
 
 AWG_LOCAL_PORT=51821
 AWG_REMOTE_PORT=51821
@@ -14,7 +14,7 @@ usage() {
     local base_name
     base_name="$(basename "$0")"
     cat <<EOF
-Usage: $base_name <start|stop|status> <awg|wg|all> [ssh-host]
+Usage: $base_name <awg|wg|all> <start|stop|status> [ssh-host]
 
 Manage SSH tunnels to WireGuard admin panels.
 Default ssh-host: $SSH_HOST
@@ -30,11 +30,11 @@ Commands:
   status   Check if the tunnel(s) are running
 
 Examples:
-  $base_name start all
-  $base_name start awg
-  $base_name stop wg
-  $base_name status all
-  $base_name start all vpnina002
+  $base_name all start
+  $base_name awg start
+  $base_name wg stop
+  $base_name all status
+  $base_name all start your-ssh-tuna-host
 EOF
     exit 0
 }
@@ -99,8 +99,8 @@ run_for() {
     esac
 }
 
-CMD="${1:-}"
-SERVICE="${2:-}"
+SERVICE="${1:-}"
+CMD="${2:-}"
 if [[ -n "${3:-}" ]]; then
     SSH_HOST="$3"
 fi
