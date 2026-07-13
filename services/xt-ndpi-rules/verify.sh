@@ -24,12 +24,12 @@ set -uo pipefail
 # (./setup-host/ndpi-setup.sh build).
 #
 # Usage:
-#   ./xt-ndpi-rules/verify.sh                 # all checks
-#   ./xt-ndpi-rules/verify.sh 2>&1 | tee verify.log
+#   ./services/xt-ndpi-rules/verify.sh                 # all checks
+#   ./services/xt-ndpi-rules/verify.sh 2>&1 | tee verify.log
 # Exit status: 0 iff every check passes.
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMPOSE_DIR="$(cd "$HERE/.." && pwd)"          # wg-easy/
+COMPOSE_DIR="$(cd "$HERE/../.." && pwd)"       # repo root (compose project dir)
 SVC=xt-ndpi-rules
 TEST_PORT=6881
 

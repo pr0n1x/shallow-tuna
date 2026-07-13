@@ -11,4 +11,14 @@
 !*.dist.env
 !*.example.env
 
-/data
+/workdir/*
+!/workdir/backups
+/workdir/backups/*
+!/workdir/awg
+/workdir/awg/*
+!/workdir/wg
+/workdir/wg/*
+
+
+!.gitignore
+!.gitkeep

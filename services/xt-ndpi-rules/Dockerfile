@@ -2,7 +2,7 @@
 # host's DOCKER-USER chain (network_mode: host). Ubuntu 24.04 so the bundled
 # libxt_ndpi.so (built on noble in the xt-ndpi-iptables package) loads cleanly.
 #
-# Build context is the compose project dir (wg-easy/), so we can pull the
+# Build context is the compose project dir (repo root), so we can pull the
 # prebuilt .deb from ndpi/artifacts. Run `ndpi-setup.sh build` first.
 #
 # manage.sh / daemon.sh are bind-mounted at runtime (see docker-compose.yml).

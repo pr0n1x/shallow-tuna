@@ -93,7 +93,7 @@ Then open:
 ### How it works
 
 1. Docker networks `exit1` and `exit2` have subnets `172.100.0.0/24` and `172.101.0.0/24`
-2. `wg-easy/routing-init.sh` creates routing tables inside containers (100, 101, ...)
+2. `services/wg-easy/routing-init.sh` creates routing tables inside containers (100, 101, ...)
 3. `host-routing` service adds SNAT rules on the host to map subnets to external IPs
 4. Per-client routing rules send traffic through specific tables
 
@@ -177,7 +177,7 @@ Re-apply with `docker compose up -d xt-ndpi-rules`.
 ### Verify
 
 ```bash
-./xt-ndpi-rules/verify.sh        # end-to-end checks (no sudo, all via docker compose)
+./services/xt-ndpi-rules/verify.sh   # end-to-end checks (no sudo, all via docker compose)
 docker logs xt-ndpi-rules        # "dropping [bittorrent] from [...] on DOCKER-USER"
 docker exec xt-ndpi-rules iptables-legacy -nvL DOCKER-USER | grep ndpi   # live counters
 ```
@@ -190,16 +190,21 @@ See [`setup-host/ndpi.md`](setup-host/ndpi.md) for the full details.
 .env                          # Configuration (not committed)
 .env.example                  # Example configuration
 docker-compose.yml            # Container definitions
-wg-easy/routing-init.sh       # Container entrypoint for routing tables
-host-routing/                 # Host SNAT rule management (Compose service)
-  Dockerfile
-  daemon.sh                   # Lifecycle: attach on start, detach on stop
-  manage.sh                   # attach/detach/status commands
-xt-ndpi-rules/                # nDPI DROP rules on DOCKER-USER (Compose service)
-  Dockerfile                  # bundles libxt_ndpi.so
-  daemon.sh                   # Lifecycle: attach on start, detach on stop
-  manage.sh                   # config-driven, per-exit, backend auto-detect
-  verify.sh                   # end-to-end verification (via docker compose)
+services/
+  wg-easy/routing-init.sh     # Container entrypoint for routing tables
+  host-routing/               # Host SNAT rule management (Compose service)
+    Dockerfile
+    daemon.sh                 # Lifecycle: attach on start, detach on stop
+    manage.sh                 # attach/detach/status commands
+  xt-ndpi-rules/              # nDPI DROP rules on DOCKER-USER (Compose service)
+    Dockerfile                # bundles libxt_ndpi.so
+    daemon.sh                 # Lifecycle: attach on start, detach on stop
+    manage.sh                 # config-driven, per-exit, backend auto-detect
+    verify.sh                 # end-to-end verification (via docker compose)
+  backup/backup.sh            # workdir/{awg,wg} -> workdir/backups archive (Compose service)
+remote/                       # Client-side scripts (run from your machine)
+  tuna-adm.sh                 # SSH tunnels to the admin panels
+  backup-wg-data.sh           # Run the backup service, download archive via pipe
 ndpi/                         # nDPI .deb packaging (xt-ndpi-dkms + iptables ext)
   debian/                     # built with Docker Compose into ndpi/artifacts
 assign-exit.sh                # Per-client exit IP assignment

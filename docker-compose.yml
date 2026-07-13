@@ -28,8 +28,8 @@ services:
       - WG_PERSISTENT_KEEPALIVE=${AWG_PERSISTENT_KEEPALIVE:-25}
       - EXIT_ROUTES=${EXIT_ROUTES:-}
     volumes:
-      - ./data/awg:/etc/wireguard
-      - ./wg-easy/routing-init.sh:/routing-init.sh:ro
+      - ./workdir/awg:/etc/wireguard
+      - ./services/wg-easy/routing-init.sh:/routing-init.sh:ro
     devices:
       - /dev/net/tun:/dev/net/tun
     ports:
@@ -57,9 +57,9 @@ services:
       - INSECURE=true
       - EXIT_ROUTES=${EXIT_ROUTES:-}
     volumes:
-      - ./data/wg:/etc/wireguard
+      - ./workdir/wg:/etc/wireguard
       - /lib/modules:/lib/modules:ro
-      - ./wg-easy/routing-init.sh:/routing-init.sh:ro
+      - ./services/wg-easy/routing-init.sh:/routing-init.sh:ro
     ports:
       - "${WG_PORT:-51830}:${WG_PORT:-51830}/udp"
       # Bind admin panel to localhost only — access via SSH tunnel
@@ -78,7 +78,7 @@ services:
       - exit2
 
   host-routing:
-    build: ./host-routing
+    build: ./services/host-routing
     container_name: host-routing
     network_mode: host
     restart: unless-stopped
@@ -91,8 +91,8 @@ services:
       - EXIT_ROUTES=${EXIT_ROUTES:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./host-routing/manage.sh:/app/manage.sh:ro
-      - ./host-routing/daemon.sh:/app/daemon.sh:ro
+      - ./services/host-routing/manage.sh:/app/manage.sh:ro
+      - ./services/host-routing/daemon.sh:/app/daemon.sh:ro
     entrypoint: ["sh", "/app/daemon.sh"]
 
   # Drops nDPI-classified traffic (default: BitTorrent) on the host's
@@ -101,7 +101,7 @@ services:
   xt-ndpi-rules:
     build:
       context: .
-      dockerfile: xt-ndpi-rules/Dockerfile
+      dockerfile: services/xt-ndpi-rules/Dockerfile
     container_name: xt-ndpi-rules
     # host netns so its iptables writes into the host's tables (where dockerd
     # creates DOCKER-USER); NET_ADMIN to edit them, SYS_MODULE to load xt_ndpi.
@@ -122,10 +122,29 @@ services:
       - NDPI_SOURCE=${NDPI_SOURCE-172.100.0.0/24,172.101.0.0/24}
     volumes:
       - /lib/modules:/lib/modules:ro
-      - ./xt-ndpi-rules/manage.sh:/app/manage.sh:ro
-      - ./xt-ndpi-rules/daemon.sh:/app/daemon.sh:ro
+      - ./services/xt-ndpi-rules/manage.sh:/app/manage.sh:ro
+      - ./services/xt-ndpi-rules/daemon.sh:/app/daemon.sh:ro
 
-  # Throwaway probe used by ./xt-ndpi-rules/verify.sh. Lives on the real exit1
+  # One-shot backup of ./workdir/{awg,wg} into ./workdir/backups. The backups dir and
+  # archive are chowned to BACKUP_USER_ID:BACKUP_GROUP_ID (numeric IDs — the
+  # container has no host users).
+  # Profiled, so `docker compose up` never starts it; run on demand:
+  #   docker compose run --rm backup                        # archive on server
+  #   docker compose run --rm -T backup --stdout > f.tar.gz # ...and stream it
+  # (or use ./remote/backup-wg-data.sh from your machine)
+  backup:
+    profiles: ["backup"]
+    image: alpine:3
+    entrypoint: ["sh", "/backup.sh"]
+    environment:
+      - BACKUP_USER_ID=${BACKUP_USER_ID:-1000}
+      - BACKUP_GROUP_ID=${BACKUP_GROUP_ID:-1000}
+    volumes:
+      - ./workdir:/data:ro
+      - ./workdir/backups:/backups
+      - ./services/backup/backup.sh:/backup.sh:ro
+
+  # Throwaway probe used by ./services/xt-ndpi-rules/verify.sh. Lives on the real exit1
   # network, so traffic it sends out is forwarded through DOCKER-USER sourced
   # from the exit1 subnet — exactly like a VPN client. Profiled, so a normal
   # `docker compose up` never starts it; verify drives it with
