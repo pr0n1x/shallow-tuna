@@ -22,7 +22,7 @@ usage() {
     local base_name
     base_name="$(basename "$0")"
     cat <<EOF
-Usage: $base_name [output-dir] [ssh-host]
+Usage: $base_name [output-dir]
 
 Run the backup service on the server and download the archive over the
 SSH pipe into <output-dir>/wg-data-<timestamp>.tar.gz. A copy also stays
@@ -34,13 +34,17 @@ Defaults:
   ssh-host      $SSH_HOST   (TUNA_ADM_SSH_HOST)
   remote dir    $REMOTE_DIR (TUNA_ADM_REMOTE_DIR)
 
+The output-dir argument is resolved against the caller's CWD; the
+TUNA_ADM_BACKUP_DIR / built-in default, when relative, is resolved
+against the env file dir. Remote dir is relative to the SSH user's
+home on the server.
+
 All can be set in $ENV_FILE, shared with tuna-adm.sh (override its path
 with TUNA_ADM_ENV).
 
 Examples:
   $base_name
   $base_name ~/backups
-  $base_name ~/backups your-other-tuna-host
 EOF
     exit 0
 }
@@ -50,10 +54,9 @@ case "${1:-}" in
 esac
 
 if [[ -n "${1:-}" ]]; then
-    BACKUP_DIR="$1"
-fi
-if [[ -n "${2:-}" ]]; then
-    SSH_HOST="$2"
+    BACKUP_DIR="$1"                        # argument: relative to the caller's CWD
+elif [[ "$BACKUP_DIR" != /* ]]; then
+    BACKUP_DIR="$SCRIPT_DIR/$BACKUP_DIR"   # env/default: relative to the env file dir
 fi
 
 mkdir -p "$BACKUP_DIR"
