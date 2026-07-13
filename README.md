@@ -204,7 +204,7 @@ services/
   backup/backup.sh            # workdir/{awg,wg} -> workdir/backups archive (Compose service)
 remote/                       # Client-side scripts (run from your machine)
   tuna-adm.sh                 # SSH tunnels to the admin panels
-  backup-wg-data.sh           # Run the backup service, download archive via pipe
+  tuna-backup.sh              # Run the backup service, download archive via pipe
 ndpi/                         # nDPI .deb packaging (xt-ndpi-dkms + iptables ext)
   debian/                     # built with Docker Compose into ndpi/artifacts
 assign-exit.sh                # Per-client exit IP assignment

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# deliberately do NOT resolve symlinks: when the script is invoked via a
+# symlink from another dir, the env file is looked up next to the SYMLINK —
+# so each project dir can hold its own tuna-adm.env beside its link
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="${TUNA_ADM_ENV:-${SCRIPT_DIR}/tuna-adm.env}"
 if [[ -f "$ENV_FILE" ]]; then

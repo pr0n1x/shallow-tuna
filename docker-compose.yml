@@ -133,7 +133,7 @@ services:
   # Profiled, so `docker compose up` never starts it; run on demand:
   #   docker compose run --rm backup                        # archive on server
   #   docker compose run --rm -T backup --stdout > f.tar.gz # ...and stream it
-  # (or use ./remote/backup-wg-data.sh from your machine)
+  # (or use ./remote/tuna-backup.sh from your machine)
   backup:
     profiles: ["backup"]
     image: alpine:3
