@@ -81,7 +81,9 @@ services:
     build: ./services/host-routing
     container_name: host-routing
     network_mode: host
-    restart: unless-stopped
+    # on-failure so a clean exit 0 (e.g. empty EXIT_ROUTES — nothing to
+    # manage) stops the container instead of restart-looping
+    restart: on-failure
     depends_on:
       awg-easy:
         condition: service_healthy

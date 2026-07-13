@@ -1,11 +1,11 @@
 #!/bin/sh
 set -e
 
-# No routes configured — nothing to attach/detach. Idle instead of exiting:
-# under 'restart: unless-stopped' any exit (even 0) becomes a restart loop.
+# No routes configured — nothing to attach/detach. Exit cleanly; the
+# service uses 'restart: on-failure', so exit 0 stops it for good.
 if [ -z "${EXIT_ROUTES:-}" ]; then
-    echo "host-routing: EXIT_ROUTES is empty — no SNAT rules to manage, idling"
-    while true; do sleep 86400 & wait $!; done
+    echo "host-routing: EXIT_ROUTES is empty — no SNAT rules to manage, exiting"
+    exit 0
 fi
 
 cleanup() {
