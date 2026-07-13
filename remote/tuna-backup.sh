@@ -25,9 +25,8 @@ usage() {
 Usage: $base_name [output-dir]
 
 Run the backup service on the server and download the archive over the
-SSH pipe into <output-dir>/wg-data-<timestamp>.tar.gz. A copy also stays
-on the server in ${REMOTE_DIR}/workdir/backups/, chowned to
-BACKUP_USER_ID:BACKUP_GROUP_ID from the server's .env.
+SSH pipe into <output-dir>/wg-data-<timestamp>.tar.gz. The archive is
+streamed only — nothing is stored on the server.
 
 Defaults:
   output-dir    $BACKUP_DIR (TUNA_ADM_BACKUP_DIR)
