@@ -208,6 +208,7 @@ remote/                       # Client-side scripts (run from your machine)
 ndpi/                         # nDPI .deb packaging (xt-ndpi-dkms + iptables ext)
   debian/                     # built with Docker Compose into ndpi/artifacts
 assign-exit.sh                # Per-client exit IP assignment
+backup.sh                     # Cron wrapper: run the backup service, log to workdir/backup.log
 setup-host/                   # Host setup scripts
   docker-setup.sh
   wireguard-setup.sh
