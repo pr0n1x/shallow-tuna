@@ -18,7 +18,7 @@ set -euo pipefail
 #   docker compose up -d --build xt-ndpi-rules
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PKG_DIR="$SCRIPT_DIR/../ndpi"            # Docker Compose packaging dir
+PKG_DIR="$(realpath "$SCRIPT_DIR/../ndpi")"   # Docker Compose packaging dir
 ARTIFACTS="$PKG_DIR/artifacts"           # where built .debs land
 
 require_root() {

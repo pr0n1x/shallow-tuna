@@ -182,7 +182,7 @@ docker logs xt-ndpi-rules        # "dropping [bittorrent] from [...] on DOCKER-U
 docker exec xt-ndpi-rules iptables-legacy -nvL DOCKER-USER | grep ndpi   # live counters
 ```
 
-See [`setup-host/ndpi.md`](setup-host/ndpi.md) for the full details.
+See [`docs/ndpi.md`](docs/ndpi.md) for the full details.
 
 ## File Structure
 
@@ -213,6 +213,7 @@ setup-host/                   # Host setup scripts
   wireguard-setup.sh
   amneziawg-setup.sh
   ndpi-setup.sh               # build/install the xt_ndpi DKMS kernel module
+docs/
   ndpi.md                     # DPI filtering docs
 ```
 
