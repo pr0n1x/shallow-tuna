@@ -4,7 +4,7 @@ Deploy WireGuard and AmneziaWG VPN servers with per-client exit IP routing.
 
 ## Features
 
-- **amnezia-wg-easy** — AmneziaWG (obfuscated WireGuard) with web UI
+- **awg-easy** — wg-easy v15 in AmneziaWG mode (obfuscated WireGuard) with web UI
 - **wg-easy** — Standard WireGuard with web UI
 - **Multi-IP exit routing** — Route different clients through different external IPs
 - **Persistent client assignments** — Survive container restarts
@@ -30,20 +30,17 @@ cp .env.example .env
 Edit `.env`:
 
 ```bash
-# Your server's external IP (for client configs)
-WG_HOST=1.2.3.4
-
-# Generate password hash for AmneziaWG admin panel
-docker run --rm ghcr.io/w0rng/amnezia-wg-easy wgpw 'your-password'
-AWG_PASSWORD_HASH=<paste-hash-here>
-
-# Custom AmneziaWG port (optional, default 51820)
+# Custom AmneziaWG port (optional, default 51820; must match the WireGuard
+# port set later in the awg-easy web UI)
 # AWG_PORT=3127
 
 # Multi-IP routing: gateway:external_ip pairs
 # Tables auto-assigned: 100, 101, 102...
 EXIT_ROUTES=172.100.0.1:1.2.3.4,172.101.0.1:2.3.4.5
 ```
+
+Server host, DNS, allowed IPs, the admin account and AmneziaWG obfuscation
+params are configured in the awg-easy web UI on first run.
 
 ### 2. Configure additional IPs on the host
 
