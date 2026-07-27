@@ -181,6 +181,76 @@ docker exec xt-ndpi-rules iptables-legacy -nvL DOCKER-USER | grep ndpi   # live 
 
 See [`docs/ndpi.md`](docs/ndpi.md) for the full details.
 
+## Junk packet generator (`awg-junk-gen.py`)
+
+Generates AmneziaWG **I1–I5** special junk packets that are byte-valid **QUIC v1
+Initial** packets carrying a real TLS ClientHello. AmneziaWG sends them before the
+WireGuard handshake, so the first thing a DPI box sees on the UDP flow is an
+ordinary HTTP/3 connection attempt.
+
+Requires `pip install cryptography`.
+
+### Generate
+
+```bash
+# One packet, default SNI (bag.itunes.apple.com)
+./awg-junk-gen.py
+
+# Pick the hostname the packet appears to connect to
+./awg-junk-gen.py --sni cdn.jsdelivr.net
+
+# Three packets for I1, I2, I3
+./awg-junk-gen.py --sni www.microsoft.com --count 3
+```
+
+Output is ready to paste:
+
+```
+I1 = <b 0xc60000000108589ec1b628078cc30000449e0bec2f18...>
+I2 = <b 0xc60000000108b3a1a3ef41ed4e5d0000449e9b790755...>
+```
+
+### Use it
+
+Put the lines in the `[Interface]` section of the config — **server and client
+must carry identical I1–I5 values**, or the handshake never completes. In this
+stack the obfuscation params are set in the awg-easy web UI (see
+[Quick Start](#1-clone-and-configure)), which propagates them into generated
+client configs.
+
+### Options
+
+| Flag | Default | Purpose |
+|---------------|------------------------|--------------------------------------------|
+| `--sni` | `bag.itunes.apple.com` | Hostname advertised in the ClientHello |
+| `--alpn` | `h3` | Comma-separated ALPN list |
+| `--count` | `1` | Packets to emit (`I1`, `I2`, …) |
+| `--size` | `1200` | Datagram size in bytes |
+| `--param` | `I` | Config key prefix (`I` or `J`) |
+| `--start` | `1` | First parameter index |
+| `--template` | built-in | Clone the fingerprint of your own capture |
+| `--format` | `awg` | `awg` / `hex` / `raw` |
+
+Every packet is self-checked before printing: the script decrypts its own output
+the way a DPI engine would and aborts if the observed SNI doesn't match.
+
+The built-in ClientHello template is from an iOS HTTP/3 request, so the JA3/JA4
+fingerprint reads as an Apple client. `--template file.hex` takes a raw
+ClientHello or a full captured Initial packet (as `<b 0x…>`, `0x…` or bare hex)
+and clones that fingerprint instead.
+
+### Caveats
+
+- **`<b 0x…>` is a literal byte string**, so one generated packet is replayed
+  verbatim on every handshake for that config. What this buys you is a blob
+  nobody else is using — unlike one copied from a forum post — plus the ability
+  to rotate. It does not make each handshake unique on the wire.
+- Pick an SNI plausible for your server's hosting; a CDN hostname is usually
+  safer than a first-party domain, since CDN IP space is broad and shared.
+- I1–I5 need AmneziaWG **1.5+** on both ends. Older builds silently lack them
+  (the `amneziawg-dkms` 1.0.0 kernel module, for instance, has no I-packet
+  support even though `awg set` lists the keys).
+
 ## File Structure
 
 ```
@@ -205,6 +275,7 @@ remote/                       # Client-side scripts (run from your machine)
 ndpi/                         # nDPI .deb packaging (xt-ndpi-dkms + iptables ext)
   debian/                     # built with Docker Compose into ndpi/artifacts
 assign-exit.sh                # Per-client exit IP assignment
+awg-junk-gen.py               # Generate AmneziaWG I1-I5 junk packets (QUIC Initials)
 backup.sh                     # Cron wrapper: run the backup service, log to workdir/backup.log
 setup-host/                   # Host setup scripts
   docker-setup.sh
