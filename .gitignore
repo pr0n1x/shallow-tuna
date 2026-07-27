@@ -2,6 +2,7 @@
 .vscode
 
 .env
+.envrc
 .env.*
 !.env.dist
 !.env.example
@@ -19,6 +20,7 @@
 !/workdir/wg
 /workdir/wg/*
 
+/docker-compose.override.yml
 
 !.gitignore
 !.gitkeep
