@@ -45,7 +45,7 @@ services:
           "-c",
           "(/usr/bin/wg show; /usr/bin/awg show) 2>/dev/null | /bin/grep -q interface",
         ]
-      interval: 1m
+      interval: 15s
       timeout: 10s
       retries: 3
     ports:
@@ -79,6 +79,21 @@ services:
       - ./workdir/wg:/etc/wireguard
       - /lib/modules:/lib/modules:ro
       - ./services/wg-easy/routing-init.sh:/routing-init.sh:ro
+    # The image's own healthcheck only probes `wg show`, which cannot see
+    # AmneziaWG interfaces (separate netlink family / socket dir), so in awg
+    # mode the container would stay "unhealthy" forever and host-routing's
+    # service_healthy dependency would never be satisfied. Probe both tools.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/bin/sh",
+          "-c",
+          "(/usr/bin/wg show; /usr/bin/awg show) 2>/dev/null | /bin/grep -q interface",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 3
     ports:
       - "${WG_PORT:-51830}:${WG_PORT:-51830}/udp"
       # Bind admin panel to localhost only — access via SSH tunnel
@@ -105,6 +120,8 @@ services:
     restart: on-failure
     depends_on:
       awg-easy:
+        condition: service_healthy
+      wg-easy:
         condition: service_healthy
     cap_add:
       - NET_ADMIN
