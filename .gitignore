@@ -20,7 +20,7 @@
 !/workdir/wg
 /workdir/wg/*
 
-/docker-compose.override.yml
+/compose.override.yml
 
 !.gitignore
 !.gitkeep

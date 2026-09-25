@@ -14,7 +14,7 @@ set -euo pipefail
 #   uninstall  purge xt-ndpi-dkms
 #   status     show package / module state
 #
-# After install, bring up the rule service (configure it in docker-compose.yml):
+# After install, bring up the rule service (configure it in compose.yml):
 #   docker compose up -d --build xt-ndpi-rules
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -47,7 +47,7 @@ Typical flow:
   docker compose up -d --build xt-ndpi-rules   # applies the DROP rule
 
 The rule (which nDPI protocols, which chain) is configured on the
-xt-ndpi-rules service in docker-compose.yml (NDPI_DROP / NDPI_CHAIN).
+xt-ndpi-rules service in compose.yml (NDPI_DROP / NDPI_CHAIN).
 EOF
     exit 0
 }

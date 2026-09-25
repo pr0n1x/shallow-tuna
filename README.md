@@ -154,7 +154,7 @@ docker compose up -d --build xt-ndpi-rules
 
 ### Configure
 
-On the `xt-ndpi-rules` service in `docker-compose.yml` (or via `.env`):
+On the `xt-ndpi-rules` service in `compose.yml` (or via `.env`):
 
 ```yaml
 environment:
@@ -256,7 +256,9 @@ and clones that fingerprint instead.
 ```
 .env                          # Configuration (not committed)
 .env.example                  # Example configuration
-docker-compose.yml            # Container definitions
+compose.yml                   # Container definitions (AmneziaWG stack)
+compose.wg.yml                # Optional overlay: plain WireGuard wg-easy service
+.envrc.example                # direnv example selecting the compose files
 services/
   wg-easy/routing-init.sh     # Container entrypoint for routing tables
   host-routing/               # Host SNAT rule management (Compose service)

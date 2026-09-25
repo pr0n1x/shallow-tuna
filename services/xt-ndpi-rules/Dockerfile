@@ -5,7 +5,7 @@
 # Build context is the compose project dir (repo root), so we can pull the
 # prebuilt .deb from ndpi/artifacts. Run `ndpi-setup.sh build` first.
 #
-# manage.sh / daemon.sh are bind-mounted at runtime (see docker-compose.yml).
+# manage.sh / daemon.sh are bind-mounted at runtime (see compose.yml).
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive

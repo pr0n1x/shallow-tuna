@@ -66,51 +66,6 @@ services:
       - exit1
       - exit2
 
-  wg-easy:
-    image: ghcr.io/wg-easy/wg-easy:15
-    container_name: wg-easy
-    restart: unless-stopped
-    entrypoint: [ "sh", "/routing-init.sh" ]
-    command: [ "/usr/bin/dumb-init", "node", "server/index.mjs" ]
-    environment:
-      - INSECURE=true
-      - EXIT_ROUTES=${EXIT_ROUTES:-}
-    volumes:
-      - ./workdir/wg:/etc/wireguard
-      - /lib/modules:/lib/modules:ro
-      - ./services/wg-easy/routing-init.sh:/routing-init.sh:ro
-    # The image's own healthcheck only probes `wg show`, which cannot see
-    # AmneziaWG interfaces (separate netlink family / socket dir), so in awg
-    # mode the container would stay "unhealthy" forever and host-routing's
-    # service_healthy dependency would never be satisfied. Probe both tools.
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "/bin/sh",
-          "-c",
-          "(/usr/bin/wg show; /usr/bin/awg show) 2>/dev/null | /bin/grep -q interface",
-        ]
-      interval: 15s
-      timeout: 10s
-      retries: 3
-    ports:
-      - "${WG_PORT:-51830}:${WG_PORT:-51830}/udp"
-      # Bind admin panel to localhost only — access via SSH tunnel
-      - "127.0.0.1:51831:51821/tcp"
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    sysctls:
-      - net.ipv4.conf.all.src_valid_mark=1
-      - net.ipv4.ip_forward=1
-      - net.ipv6.conf.all.disable_ipv6=0
-      - net.ipv6.conf.all.forwarding=1
-      - net.ipv6.conf.default.forwarding=1
-    networks:
-      - exit1
-      - exit2
-
   host-routing:
     build: ./services/host-routing
     container_name: host-routing
@@ -118,10 +73,9 @@ services:
     # on-failure so a clean exit 0 (e.g. empty EXIT_ROUTES — nothing to
     # manage) stops the container instead of restart-looping
     restart: on-failure
+    # compose.wg.yml adds a wg-easy dependency when that overlay is loaded
     depends_on:
       awg-easy:
-        condition: service_healthy
-      wg-easy:
         condition: service_healthy
     cap_add:
       - NET_ADMIN

@@ -29,7 +29,7 @@ Two pieces, split by what can be containerized:
   `libxt_ndpi.so` can't load under Alpine/musl).
 
 The rule (which protocols, which chain) is service config in
-`docker-compose.yml` — `NDPI_DROP` / `NDPI_CHAIN` — not a host file.
+`compose.yml` — `NDPI_DROP` / `NDPI_CHAIN` — not a host file.
 
 ## Install
 
@@ -51,7 +51,7 @@ is pinned in [`../ndpi/NDPI_REF`](../ndpi/NDPI_REF); override per build with
 
 ## Configure the rule
 
-On the `xt-ndpi-rules` service in `docker-compose.yml`:
+On the `xt-ndpi-rules` service in `compose.yml`:
 
 ```yaml
 environment:
