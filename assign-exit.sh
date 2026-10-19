@@ -168,11 +168,11 @@ case "$ACTION" in
         echo "Available networks:"
         list_networks
         echo
-        echo "Active routing rules:"
+        echo "Active routing rules in $CONTAINER:"
         docker exec "$CONTAINER" ip rule show \
             | grep -v -E 'lookup (local|main|default)' || echo "  (none)"
         echo
-        echo "Persistent assignments ($ROUTES_FILE):"
+        echo "Persistent assignments in $CONTAINER ($ROUTES_FILE):"
         docker exec "$CONTAINER" cat "$ROUTES_FILE" 2>/dev/null || echo "  (none)"
         ;;
 
