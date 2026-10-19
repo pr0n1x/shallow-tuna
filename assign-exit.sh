@@ -82,16 +82,22 @@ usage() {
     list_networks
     echo
     echo "Examples:"
-    echo "  $0 wg-easy add 10.8.0.2 exit1"
-    echo "  $0 wg-easy add 10.8.0.3 exit2"
-    echo "  $0 wg-easy remove 10.8.0.2"
-    echo "  $0 wg-easy list"
+    echo "  $0 awg-easy add 10.8.0.2 exit1"
+    echo "  $0 awg-easy add 10.8.0.3 exit2"
+    echo "  $0 awg-easy remove 10.8.0.2"
+    echo "  $0 awg-easy list"
     exit 1
 }
 
 CONTAINER="${1:-}"
 ACTION="${2:-}"
 [ -z "$CONTAINER" ] || [ -z "$ACTION" ] && usage
+
+if ! docker inspect --type container "$CONTAINER" >/dev/null 2>&1; then
+    echo "ERROR: container '$CONTAINER' not found. Running containers in project '$COMPOSE_PROJECT':" >&2
+    docker ps --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --format '  {{.Names}}' >&2
+    exit 1
+fi
 
 case "$ACTION" in
     add)

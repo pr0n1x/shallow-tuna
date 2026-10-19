@@ -98,13 +98,13 @@ Then open:
 
 ```bash
 # Route client 10.8.0.3 through exit2 network
-./assign-exit.sh wg-easy add 10.8.0.3 exit2
+./assign-exit.sh awg-easy add 10.8.0.3 exit2
 
 # Remove assignment
-./assign-exit.sh wg-easy remove 10.8.0.3
+./assign-exit.sh awg-easy remove 10.8.0.3
 
 # List available networks and current assignments
-./assign-exit.sh wg-easy list
+./assign-exit.sh awg-easy list
 ```
 
 ### Check current SNAT rules
