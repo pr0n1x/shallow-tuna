@@ -14,7 +14,16 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ENV_FILE="${SCRIPT_DIR}/.env"
 ROUTES_FILE="/etc/wireguard/exit-routes"
-COMPOSE_PROJECT="${COMPOSE_PROJECT:-wg-easy}"
+
+# Compose project that owns the exit networks (Docker names them
+# <project>_<network>). Unless COMPOSE_PROJECT is set explicitly, take it from
+# the container's compose label, else fall back to the directory name — which
+# is Compose's own default project name.
+if [ -z "${COMPOSE_PROJECT:-}" ] && [ -n "${1:-}" ]; then
+    COMPOSE_PROJECT=$(docker inspect "$1" \
+        --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null || true)
+fi
+COMPOSE_PROJECT="${COMPOSE_PROJECT:-$(basename "$SCRIPT_DIR")}"
 
 # Load EXIT_ROUTES from .env
 if [ -f "$ENV_FILE" ]; then
