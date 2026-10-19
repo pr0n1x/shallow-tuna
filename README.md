@@ -98,14 +98,17 @@ Then open:
 
 ```bash
 # Route client 10.8.0.3 through exit2 network
-./assign-exit.sh awg-easy add 10.8.0.3 exit2
+./assign-exit.sh add 10.8.0.3 exit2
 
 # Remove assignment
-./assign-exit.sh awg-easy remove 10.8.0.3
+./assign-exit.sh remove 10.8.0.3
 
 # List available networks and current assignments
-./assign-exit.sh awg-easy list
+./assign-exit.sh list
 ```
+
+The container is detected automatically (`awg-easy` or `wg-easy`). When both run,
+name it explicitly: `./assign-exit.sh wg-easy list`.
 
 ### Check current SNAT rules
 
@@ -307,6 +310,6 @@ docs/
 
 ### Client not using expected exit IP
 
-1. Verify assignment: `./assign-exit.sh awg-easy list`
+1. Verify assignment: `./assign-exit.sh list`
 2. Check rule inside container: `docker exec awg-easy ip rule show`
 3. Toggle VPN on client to force new connection

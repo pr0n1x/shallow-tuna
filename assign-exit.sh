@@ -5,22 +5,29 @@ set -euo pipefail
 # Assignments persist across container restarts.
 #
 # Usage:
-#   ./assign-exit.sh <container> add <client-ip> <network>
-#   ./assign-exit.sh <container> remove <client-ip>
-#   ./assign-exit.sh <container> list
+#   ./assign-exit.sh [container] add <client-ip> <network>
+#   ./assign-exit.sh [container] remove <client-ip>
+#   ./assign-exit.sh [container] list
 #
+# Container defaults to the single running VPN container (awg-easy or wg-easy).
 # Network names are resolved via Docker, table IDs from EXIT_ROUTES order.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ENV_FILE="${SCRIPT_DIR}/.env"
 ROUTES_FILE="/etc/wireguard/exit-routes"
 
+case "${1:-}" in
+    add|remove|rm|del|list|ls) set -- "" "$@" ;;
+esac
+CONTAINER="${1:-}"
+ACTION="${2:-}"
+
 # Compose project that owns the exit networks (Docker names them
 # <project>_<network>). Unless COMPOSE_PROJECT is set explicitly, take it from
 # the container's compose label, else fall back to the directory name — which
 # is Compose's own default project name.
-if [ -z "${COMPOSE_PROJECT:-}" ] && [ -n "${1:-}" ]; then
-    COMPOSE_PROJECT=$(docker inspect "$1" \
+if [ -z "${COMPOSE_PROJECT:-}" ] && [ -n "$CONTAINER" ]; then
+    COMPOSE_PROJECT=$(docker inspect "$CONTAINER" \
         --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null || true)
 fi
 COMPOSE_PROJECT="${COMPOSE_PROJECT:-$(basename "$SCRIPT_DIR")}"
@@ -71,31 +78,41 @@ list_networks() {
 }
 
 usage() {
-    echo "Usage: $0 <container> <add|remove|list> [client-ip] [network]"
+    echo "Usage: $0 [container] <command> [args]"
     echo
     echo "Commands:"
-    echo "  add <client-ip> <network>   Route client via exit network"
-    echo "  remove <client-ip>          Remove client exit routing"
-    echo "  list                        Show current assignments"
+    echo "  [container] add <client-ip> <network>   Route client via exit network"
+    echo "  [container] remove <client-ip>          Remove client exit routing"
+    echo "  [container] list                        Show current assignments"
+    echo
+    echo "Container defaults to the running VPN container (awg-easy or wg-easy);"
+    echo "it must be given when both are running."
     echo
     echo "Available networks:"
     list_networks
     echo
     echo "Examples:"
-    echo "  $0 awg-easy add 10.8.0.2 exit1"
-    echo "  $0 awg-easy add 10.8.0.3 exit2"
-    echo "  $0 awg-easy remove 10.8.0.2"
-    echo "  $0 awg-easy list"
+    echo "  $0 list"
+    echo "  $0 add 10.8.0.2 exit1"
+    echo "  $0 remove 10.8.0.2"
+    echo "  $0 wg-easy add 10.8.0.3 exit2"
     exit 1
 }
 
-CONTAINER="${1:-}"
-ACTION="${2:-}"
-[ -z "$CONTAINER" ] || [ -z "$ACTION" ] && usage
+[ -z "$ACTION" ] && usage
 
-if ! docker inspect --type container "$CONTAINER" >/dev/null 2>&1; then
+if [ -z "$CONTAINER" ]; then
+    mapfile -t vpn_containers < <(docker ps \
+        --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" \
+        --format '{{.Names}}' | grep -E '^a?wg-easy$' || true)
+    case ${#vpn_containers[@]} in
+        1) CONTAINER="${vpn_containers[0]}" ;;
+        0) echo "ERROR: no VPN container (awg-easy/wg-easy) running in project '$COMPOSE_PROJECT'" >&2; exit 1 ;;
+        *) echo "ERROR: several VPN containers running (${vpn_containers[*]}); specify one" >&2; exit 1 ;;
+    esac
+elif ! docker inspect --type container "$CONTAINER" >/dev/null 2>&1; then
     echo "ERROR: container '$CONTAINER' not found. Running containers in project '$COMPOSE_PROJECT':" >&2
-    docker ps --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --format '  {{.Names}}' >&2
+    docker ps --filter "label=com.docker.compose.project=$COMPOSE_PROJECT" --format '{{"  "}}{{.Names}}' >&2
     exit 1
 fi
 
