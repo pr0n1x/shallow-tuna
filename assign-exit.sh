@@ -65,8 +65,8 @@ list_networks() {
     for network in "${!NETWORK_TO_GATEWAY[@]}"; do
         gateway="${NETWORK_TO_GATEWAY[$network]}"
         table_id="${GATEWAY_TO_TABLE[$gateway]:-}"
-        external_ip="${GATEWAY_TO_EXTERNAL[$gateway]:-}"
-        [ -n "$table_id" ] && echo "  $network: table $table_id → $external_ip"
+        [ -n "$table_id" ] || continue
+        echo "  $network: table $table_id → ${GATEWAY_TO_EXTERNAL[$gateway]}"
     done | sort
 }
 
