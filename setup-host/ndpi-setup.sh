@@ -70,7 +70,12 @@ do_build() {
 # NOTE, since it loads at boot / when the service starts). Needs root (modprobe).
 verify_module() {
     echo "── Verifying ──"
-    dkms status xt-ndpi 2>/dev/null | grep -q installed \
+    # Capture first instead of piping into `grep -q`: with two kernels installed
+    # dkms prints two lines, grep -q exits on the first, and the resulting
+    # SIGPIPE fails the pipeline under `set -o pipefail`.
+    local dkms_out
+    dkms_out="$(dkms status xt-ndpi 2>/dev/null)" || true
+    grep -q installed <<<"$dkms_out" \
         || { echo "ERROR: xt-ndpi DKMS module not built/installed" >&2; return 1; }
 
     # A reload can be deferred if the OLD module is still in use (e.g. a running
