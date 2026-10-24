@@ -285,7 +285,8 @@ backup.sh                     # Cron wrapper: run the backup service, log to wor
 setup-host/                   # Host setup scripts
   docker-setup.sh
   wireguard-setup.sh
-  amneziawg-setup.sh
+  amneziawg-setup.sh          # install/fix-dkms/status/uninstall the amneziawg module
+  patches/                    # amneziawg-dkms compat fix for newer kernels (auto-applied)
   ndpi-setup.sh               # build/install the xt_ndpi DKMS kernel module
 docs/
   ndpi.md                     # DPI filtering docs
@@ -301,6 +302,23 @@ docs/
 | wg-easy  (WireGuard) | 51831/tcp     | HTTP     | Admin panel (local)  |
 
 ## Troubleshooting
+
+### `amneziawg-dkms` fails to build (`setup_udp_tunnel_sock` incompatible pointer type)
+
+The PPA's `amneziawg-dkms` 1.0.0 doesn't compile against kernels that backported
+the 7.1.5 `udp_tunnel` API change without bumping the version (Ubuntu
+`7.0.0-38+`, 24.04 HWE). `apt` then leaves `amneziawg-dkms` unconfigured and
+every later `apt-get install` fails. `amneziawg-setup.sh install` handles this
+itself; for a host that is already broken (or after an `amneziawg-dkms` update
+replaced the sources):
+
+```bash
+sudo ./setup-host/amneziawg-setup.sh fix-dkms   # patch /usr/src/amneziawg-*, dpkg --configure -a, dkms install
+sudo ./setup-host/amneziawg-setup.sh status
+```
+
+The fix is the upstream (not yet released) [PR #265](https://github.com/amnezia-vpn/amneziawg-linux-kernel-module/pull/265),
+vendored in `setup-host/patches/`. It is a no-op once the PPA ships a fixed build.
 
 ### VPN connected but no internet
 
